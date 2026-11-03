@@ -10,9 +10,65 @@
 .reportfilters{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.reportfilters select{max-width:160px}.highlightnote{font-size:12px;background:#eef4ff;padding:12px;border-radius:9px;margin:12px 0}
 .agent-list-mobile{overflow-x:auto}.ai-chip{color:#3459a5;background:#ecf1ff;border:1px solid #d9e4ff;border-radius:99px;padding:3px 10px;font-size:11px}
 @media(max-width:680px){.reportfilters{align-items:stretch}.reportfilters select,.reportfilters button{width:100%;max-width:none}.kb-entry{padding:12px}.chat-head{gap:12px}}
+
+/* Verisure portal theme — the default is deliberately light / white */
+:root{color-scheme:light}
+.entry{background:#ffffff;color:#14243b}
+.entry .brand{color:#d91642}.entry p{color:#62738d}
+.entry h1{color:#14243b}.entry h1 em{font-style:normal;color:#df1544}
+.portal{background:#ffffff;border:1px solid #dce4ef;color:#14243b;box-shadow:0 12px 36px #13274311;min-height:222px}
+.portal:hover{background:#f9fbff;border-color:#ed1846;transform:translateY(-3px)}
+.portal span{color:#62738d}.portal b{color:#14243b}
+.portal .porticon{display:grid;place-items:center;width:46px;height:46px;background:#fff0f3;border-radius:14px;color:#db1641;font-size:26px}
+.entry-inner{position:relative}.entry .portals{margin-top:34px}
+.brand-lockup{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.verisure-logo{display:block;width:174px;height:78px;object-fit:contain;mix-blend-mode:multiply}
+.brand-fallback{font-weight:900;font-size:27px;color:#e61347}
+.logo-caption{border-left:1px solid #dee5ef;padding-left:14px;color:#65748b;font-weight:700;font-size:13px}
+.theme-toggle{background:transparent;border:1px solid #d4deeb;border-radius:999px;padding:9px 13px;color:#243a57;font-size:12px;font-weight:750;white-space:nowrap}
+.theme-toggle:hover{border-color:#e51849}
+.welcome-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.login-brand{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.authcard .verisure-logo{width:142px;height:70px}
+[data-theme="dark"]{color-scheme:dark}
+[data-theme="dark"] body,[data-theme="dark"] .shell{background:#0e1627;color:#e7eef9}
+[data-theme="dark"] .entry{background:radial-gradient(circle at 80% 15%,#1d2f53,#0d1729 58%);color:#e7eef9}
+[data-theme="dark"] .entry h1,[data-theme="dark"] .portal b{color:#f7f9ff}
+[data-theme="dark"] .entry p,[data-theme="dark"] .portal span{color:#b4c5dd}
+[data-theme="dark"] .portal{background:#17243b;color:#f7f9ff;border-color:#364761;box-shadow:none}
+[data-theme="dark"] .portal:hover{background:#1b2c49;border-color:#fa6080}
+[data-theme="dark"] .authpage{background:#0e1627}
+[data-theme="dark"] .authcard,[data-theme="dark"] .top,[data-theme="dark"] .sidebar,[data-theme="dark"] .card,[data-theme="dark"] .tablewrap,[data-theme="dark"] .modal{background:#17243b;color:#e7eef9;border-color:#32425c}
+[data-theme="dark"] input,[data-theme="dark"] select,[data-theme="dark"] textarea,[data-theme="dark"] .caseitem{background:#0e1b31;color:#e7eef9;border-color:#42516b}
+[data-theme="dark"] .caseitem.sel{background:#253f6c;border-color:#7ea7ff}
+[data-theme="dark"] th{background:#20334f;color:#c4d1e5}
+[data-theme="dark"] td,[data-theme="dark"] th{border-color:#32445f}
+[data-theme="dark"] .sidebar button{color:#c4d2e5}
+[data-theme="dark"] .sidebar button.active{background:#243d62;color:#fff}
+[data-theme="dark"] .muted,[data-theme="dark"] .footer,[data-theme="dark"] .logo-caption{color:#b0bdd0}
+[data-theme="dark"] .theme-toggle{color:#fff;border-color:#60738f}
+[data-theme="dark"] .bubble{background:#263956;color:#f0f4fa}
+[data-theme="dark"] .bubble.own{background:#2b4b87}
+[data-theme="dark"] .ai-banner,[data-theme="dark"] .kb-step,[data-theme="dark"] .highlightnote,[data-theme="dark"] .notice{background:#263e63;color:#e1ebff;border-color:#466390}
+[data-theme="dark"] .note{background:#473b28;color:#f5dfaf;border-color:#6e5c40}
+[data-theme="dark"] .top{border-color:#344763}
+[data-theme="dark"] .verisure-logo{mix-blend-mode:normal;background:#fff;border-radius:11px;padding:4px}
+[data-theme="dark"] .btn.alt{background:#213653;color:#e8f0ff;border-color:#537096}
+[data-theme="dark"] .chip{background:#25395b;color:#ecf3ff}
+[data-theme="dark"] .active-dot{background:#47e4a7}
+@media(max-width:650px){.entry{padding:18px}.entry h1{font-size:clamp(34px,9vw,50px);margin:30px 0 18px}.portals{gap:12px}.portal{min-height:164px}.logo-caption{font-size:11px}.verisure-logo{width:130px;height:66px}}
+
 </style></head><body><div id="app"></div><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script><script>
 /* Public project credentials only; the SERVICE_ROLE key must NEVER be placed here. */
 const CONFIG={url:'https://qegoaryhedsttjcnvljz.supabase.co',anon:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFlZ29hcnloZWRzdHRqY252bGp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM3MTU1MzEsImV4cCI6MjEwOTI5MTUzMX0.OQpXIG42O6QgKVC2-Z9-MAoa8hnZlbAexol4LlSrtKw'};
+
+const THEME_KEY='resolve-theme';
+function theme(){return localStorage.getItem(THEME_KEY)==='dark'?'dark':'light'}
+function setTheme(mode){localStorage.setItem(THEME_KEY,mode);document.documentElement.setAttribute('data-theme',mode);document.querySelectorAll('[data-theme-toggle]').forEach(btn=>btn.textContent=(mode==='dark'?'☀ Light mode':'☾ Dark mode'));}
+function toggleTheme(){setTheme(theme()==='dark'?'light':'dark')}
+function themeButton(){return `<button type="button" class="theme-toggle" data-theme-toggle onclick="toggleTheme()">${theme()==='dark'?'☀ Light mode':'☾ Dark mode'}</button>`}
+function logoMark(){return `<img class="verisure-logo" src="https://asset.brandfetch.io/id98I3Kz6C/id-kzK5uj2.png?updated=1716597061125" alt="Verisure" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'brand-fallback',textContent:'verisure'}))">`}
+setTheme(theme());
 const el=document.getElementById('app');const state={reportRange:'all',client:null,user:null,me:null,portal:null,tab:'overview',cases:[],profiles:[],articles:[],steps:[],messages:[],attempts:[],selected:null,filter:'all',status:'',alert:'',channels:[],loginType:'field'};
 const e=s=>String(s??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const fmt=d=>d?new Date(d).toLocaleString('en-GB',{dateStyle:'short',timeStyle:'short'}):'—';
@@ -25,23 +81,51 @@ const api=()=>{if(!state.client)throw Error('Supabase is not configured. Open in
 const fail=x=>{state.alert=x.message||String(x);render()};
 const showAlert=()=>state.alert?`<div class="notice error" role="alert">${e(state.alert)}</div>`:'';
 const btn=(text,func,cls='')=>`<button class="btn ${cls}" onclick="${func}">${text}</button>`;
-function home(){el.innerHTML=`<section class="entry"><div class="entry-inner"><div class="brand">◈ resolve.</div><h1>One place for every technical question.</h1><p>Start with guided troubleshooting. Our call centre team can follow every step and step in whenever you need them.</p><div class="portals"><button class="portal" onclick="login('field')"><div style="font-size:28px">▣</div><b>Field Login</b><span>Ask a question, follow solutions and chat with Technical Support.</span></button><button class="portal" onclick="login('staff')"><div style="font-size:28px">◉</div><b>Call Centre Login</b><span>Monitor troubleshooting, take over conversations and manage the queue.</span></button></div><p class="small">Secure access requires an approved account. Account creation is controlled by the manager.</p></div></section>`}
-function login(type){state.loginType=type;el.innerHTML=`<div class="authpage"><form class="authcard" onsubmit="signIn(event)"><div class="brand">◈ resolve.</div><h2 style="margin-top:26px">${type==='field'?'Field login':'Call centre login'}</h2><p class="muted small">Sign in with your assigned username and password.</p>${showAlert()}<label>Username</label><input id="username" required autocomplete="username" placeholder="Employee ID or username"><label>Password</label><input id="password" type="password" required autocomplete="current-password"><div style="height:22px"></div><button class="btn full" type="submit">Sign in</button><button class="btn alt full" type="button" style="margin-top:9px" onclick="state.alert='';home()">Back to home</button><p class="footer">Your access rights are verified by the server.</p></form></div>`}
-async function signIn(ev){ev.preventDefault();state.alert='';try{const username=document.getElementById('username').value.trim().toLowerCase();const password=document.getElementById('password').value;const {data,error}=await api().auth.signInWithPassword({email:username+'@resolve-login.invalid',password});if(error)throw error;state.user=data.user;await initSession();if(state.loginType==='field'&&state.me.role!=='field'||state.loginType==='staff'&&state.me.role==='field'){await api().auth.signOut();state.user=null;state.me=null;throw Error('This account cannot use this portal.');}}catch(err){fail(err)}}
+function home(){
+ el.innerHTML=`<section class="entry"><div class="entry-inner">
+  <div class="welcome-top"><div class="brand-lockup">${logoMark()}<div class="logo-caption">Resolve<br>Internal support</div></div>${themeButton()}</div>
+  <h1>One place for every<br><em>technical question.</em></h1>
+  <p>Guided troubleshooting for colleagues in the field, with your Technical Support team ready to take over whenever needed.</p>
+  <div class="portals">
+   <button class="portal" onclick="login('field')"><span class="porticon">↗</span><b>Field Login</b><span>Describe an issue, follow approved solutions and speak with Technical Support.</span></button>
+   <button class="portal" onclick="login('staff')"><span class="porticon">◉</span><b>Call Centre Login</b><span>Monitor live AI-assisted troubleshooting, take over chats and manage support requests.</span></button>
+  </div>
+  <p class="small" style="margin-top:23px">Company-authorised access only · 13-agent team · Live human takeover</p>
+ </div></section>`;
+}
+function login(type){state.loginType=type;el.innerHTML=`<div class="authpage"><form class="authcard" onsubmit="signIn(event)">
+ <div class="login-brand">${logoMark()}${themeButton()}</div>
+ <h2 style="margin-top:23px">${type==='field'?'Field login':'Call Centre login'}</h2>
+ <p class="muted small">Enter your approved employee ID and six-digit PIN.</p>${showAlert()}
+ <label>Username / employee ID</label><input id="username" required autocomplete="username" placeholder="Employee ID or username" maxlength="40">
+ <label>6-digit PIN</label><input id="password" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" minlength="6" required autocomplete="current-password" placeholder="••••••">
+ <div style="height:22px"></div><button class="btn full" type="submit">Sign in</button>
+ <button class="btn alt full" type="button" style="margin-top:9px" onclick="state.alert='';home()">Back to home</button>
+ <p class="footer">Keep your PIN private. Manager accounts should have MFA enabled before a company rollout.</p>
+ </form></div>`;
+}
+async function signIn(ev){ev.preventDefault();state.alert='';try{const username=document.getElementById('username').value.trim().toLowerCase();const password=document.getElementById('password').value;if(!/^[0-9]{6}$/.test(password))throw Error('Enter a six-digit PIN');const {data,error}=await api().auth.signInWithPassword({email:username+'@resolve-login.invalid',password});if(error)throw error;state.user=data.user;await initSession();if(state.loginType==='field'&&state.me.role!=='field'||state.loginType==='staff'&&state.me.role==='field'){await api().auth.signOut();state.user=null;state.me=null;throw Error('This account cannot use this portal.');}}catch(err){fail(err)}}
 async function initSession(){const {data,error}=await api().from('profiles').select('*').eq('id',state.user.id).single();if(error||!data?.enabled){await api().auth.signOut();throw Error('Account not authorised or disabled.')}state.me=data;state.portal=data.role==='field'?'field':'staff';if(state.loginType==='field'&&data.role!=='field'||state.loginType==='staff'&&data.role==='field'){await api().auth.signOut();throw Error('Please use the correct login portal for your role.');}if(data.must_change_password){passwordModal();return}await refresh(true);subscribe();}
-function passwordModal(){el.innerHTML=`<div class="authpage"><form class="authcard" onsubmit="changePassword(event)"><h2>Secure your account</h2><p class="muted">You must change your temporary password before using Resolve.</p>${showAlert()}<label>New password (12+ characters)</label><input type="password" id="newpw" minlength="12" required><label>Confirm password</label><input type="password" id="newpw2" minlength="12" required><div style="height:18px"></div><button class="btn full">Update password</button></form></div>`}
-async function changePassword(ev){ev.preventDefault();try{const p=document.getElementById('newpw').value;if(p!==document.getElementById('newpw2').value)throw Error('Passwords do not match');if(p.length<12)throw Error('Use at least 12 characters');const {error}=await api().auth.updateUser({password:p});if(error)throw error;const r=await api().rpc('change_my_password_completed');if(r.error)throw r.error;state.me.must_change_password=false;await refresh(true);subscribe()}catch(err){fail(err);passwordModal()}}
+function passwordModal(){el.innerHTML=`<div class="authpage"><form class="authcard" onsubmit="changePassword(event)">
+ <div class="login-brand">${logoMark()}${themeButton()}</div><h2 style="margin-top:18px">Set your personal PIN</h2>
+ <p class="muted small">Your temporary PIN must be changed before using Resolve. Avoid dates, repeated numbers or sequential PINs.</p>${showAlert()}
+ <label>New six-digit PIN</label><input type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" minlength="6" id="newpw" required autocomplete="new-password">
+ <label>Confirm six-digit PIN</label><input type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" minlength="6" id="newpw2" required autocomplete="new-password">
+ <div style="height:18px"></div><button class="btn full">Update PIN</button></form></div>`;
+}
+async function changePassword(ev){ev.preventDefault();try{const p=document.getElementById('newpw').value;if(p!==document.getElementById('newpw2').value)throw Error('Passwords do not match');if(!/^[0-9]{6}$/.test(p))throw Error('Use exactly six numeric digits');const {error}=await api().auth.updateUser({password:p});if(error)throw error;const r=await api().rpc('change_my_password_completed');if(r.error)throw r.error;state.me.must_change_password=false;await refresh(true);subscribe()}catch(err){fail(err);passwordModal()}}
 async function refresh(draw=true){try{if(!state.me||state.me.must_change_password)return;const c=api();const [cs,ps,as,ss]=await Promise.all([c.from('cases').select('*').order('created_at',{ascending:false}).limit(1000),c.from('profiles').select('id,username,display_name,role,enabled,agent_state,max_chats,available_since,can_monitor,can_takeover,can_reassign').order('display_name'),c.from('articles').select('*').order('title'),c.from('article_steps').select('*').order('ordinal')]);for(const r of [cs,ps,as,ss])if(r.error)throw r.error;state.cases=cs.data||[];state.profiles=ps.data||[];state.articles=as.data||[];state.steps=ss.data||[];if(state.selected&&!state.cases.some(x=>x.id===state.selected))state.selected=null;if(!state.selected&&state.cases.length)state.selected=state.cases[0].id;await loadSelected(false);if(draw)render()}catch(err){state.alert=err.message;render()}}
 async function loadSelected(draw=true){if(!state.selected){state.messages=[];state.attempts=[];return}const [m,a]=await Promise.all([api().from('messages').select('*').eq('case_id',state.selected).order('created_at'),api().from('step_attempts').select('*').eq('case_id',state.selected)]);if(m.error)throw m.error;if(a.error)throw a.error;state.messages=m.data||[];state.attempts=a.data||[];if(draw)render()}
 function subscribe(){state.channels.forEach(ch=>api().removeChannel(ch));state.channels=[];const ch=api().channel('resolve-refresh-'+state.user.id).on('postgres_changes',{event:'*',schema:'public',table:'cases'},()=>refresh()).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'},()=>refresh()).on('postgres_changes',{event:'*',schema:'public',table:'profiles'},()=>refresh()).subscribe();state.channels=[ch]}
 async function logout(){try{if(state.me?.role==='agent')await api().rpc('set_my_presence',{p_state:'offline'});await api().auth.signOut()}catch{}state.channels.forEach(ch=>api().removeChannel(ch));Object.assign(state,{user:null,me:null,portal:null,selected:null,cases:[],messages:[],alert:''});home()}
-function header(){return `<header class="top"><div class="brand">◈ resolve.</div><div class="topright"><span class="muted">${e(state.me.display_name)} · ${e(state.me.role)}</span>${btn('Sign out','logout()','alt sm')}</div></header>`}
+function header(){return `<header class="top"><div class="brand-lockup">${logoMark()}<span class="logo-caption">Resolve</span></div><div class="topright">${themeButton()}<span class="muted">${e(state.me.display_name)} · ${e(state.me.role)}</span>${btn('Sign out','logout()','alt sm')}</div></header>`}
+
 function nav(){const tabs=state.me.role==='field'?[['conversations','My conversations'],['new','Ask Resolve']]:[['overview','Overview'],['inbox','Live conversations'],['monitor','AI monitoring'],['team','Agent team'],...(state.me.role==='manager'?[['knowledge','Knowledge base'],['reports','Reports & exports'],['accounts','Account management']]:[])];return `<aside class="sidebar">${tabs.map(([id,title])=>`<button class="${state.tab===id?'active':''}" onclick="state.tab='${id}';state.filter='all';render()">${title}</button>`).join('')}</aside>`}
 function render(){if(!state.me){if(state.loginType)login(state.loginType);else home();return}if(state.me.must_change_password){passwordModal();return}if(state.portal==='field'&&!['new','conversations'].includes(state.tab))state.tab='conversations';if(state.portal==='staff'&&!['overview','inbox','monitor','team','knowledge','reports','accounts'].includes(state.tab))state.tab='overview';let content='';if(state.tab==='new')content=newRequest();else if(state.tab==='conversations'||state.tab==='inbox')content=inbox();else if(state.tab==='monitor')content=monitorPage();else if(state.tab==='knowledge')content=knowledgePage();else if(state.tab==='overview')content=overview();else if(state.tab==='team')content=team();else if(state.tab==='reports')content=reports();else if(state.tab==='accounts')content=accounts();el.innerHTML=`<div class="shell">${header()}<div class="layout">${nav()}<main class="main">${showAlert()}${content}<div class="footer">Resolve · Protected by Supabase authentication and database policies · Times shown in your browser's timezone</div></main></div></div>`;const msgs=document.getElementById('messages');if(msgs)msgs.scrollTop=msgs.scrollHeight}
 function scoredArticles(question){const q=String(question||'').toLowerCase();const words=q.match(/[a-z0-9]{3,}/g)||[];return state.articles.filter(a=>a.active).map(a=>{const title=a.title.toLowerCase(),keys=(a.keywords||'').toLowerCase().split(/[,;\s]+/).filter(x=>x.length>2);let score=(q.includes(title)?15:0);for(const w of words){if(title.includes(w))score+=3;if(keys.includes(w))score+=5;}return {a,score}}).filter(x=>x.score>0).sort((a,b)=>b.score-a.score)}
 function showSuggestion(){const question=document.getElementById('subject')?.value||'';const matches=scoredArticles(question),pick=document.getElementById('article'),hint=document.getElementById('matchHint');if(!pick||!hint)return;if(pick.dataset.manual!=='1'){pick.value=matches.length?matches[0].a.id:''}hint.textContent=matches.length?'Suggested guide: '+matches[0].a.title+' (please verify it matches your issue).':'No approved guide matched yet. Your question will go to a human agent.'}
 function newRequest(){return `<div class="pagehead"><div><h2>Ask Resolve</h2><p class="muted">Describe an error in your own words. Resolve suggests an approved guide or transfers you to Technical Support.</p></div></div><div class="card" style="max-width:720px"><form onsubmit="createCase(event)"><label>What is the error or question?</label><textarea id="subject" required maxlength="300" oninput="showSuggestion()" placeholder="For example: Starkey isn't arming after replacement"></textarea><label>Matched troubleshooting guide</label><select id="article" data-manual="0" onchange="this.dataset.manual='1'"><option value="">No matching guide — human support</option>${state.articles.filter(a=>a.active).map(a=>`<option value="${a.id}">${e(a.title)}</option>`).join('')}</select><div id="matchHint" class="highlightnote">Type your question to get a guide suggestion.</div><p class="muted small">This assistant uses approved, step-by-step procedures, not a generative AI model. You can request a human at any time.</p><p class="muted small">Do not include customer passwords, alarm codes or unnecessary personal information.</p><div style="height:12px"></div><button class="btn">Start conversation →</button></form></div>`}
-async function createCase(ev){ev.preventDefault();try{const subject=document.getElementById('subject').value.trim();const aid=document.getElementById('article').value;const r=await api().rpc('create_case',{p_subject:subject,p_article_id:aid||null});if(r.error)throw r.error;state.selected=r.data;await refresh(false);if(!aid){const q=await api().rpc('escalate_case',{p_case_id:r.data});if(q.error)throw q.error;await refresh(false)}state.tab='conversations';render()}catch(err){fail(err)}}
+async function createCase(ev){ev.preventDefault();try{const subject=document.getElementById('subject').value.trim();const aid=document.getElementById('article').value;const r=await api().rpc('create_case',{p_subject:subject,p_article_id:aid||null});if(r.error)throw r.error;state.selected=r.data;await refresh(false);state.tab='conversations';render()}catch(err){fail(err)}}
 function caseList(){let cases=state.cases;if(state.filter!=='all')cases=cases.filter(c=>c.status===state.filter);return `<div class="card"><div class="pagehead"><b>Conversations (${cases.length})</b><select style="max-width:130px" onchange="state.filter=this.value;render()"><option value="all" ${state.filter==='all'?'selected':''}>All</option>${['ai','queued','assigned','resolved'].map(s=>`<option ${s===state.filter?'selected':''} value="${s}">${s}</option>`).join('')}</select></div><div class="list">${cases.length?cases.map(c=>`<button class="caseitem ${state.selected===c.id?'sel':''}" onclick="selectCase('${c.id}')"><b>${e(c.subject)}</b><div class="small muted" style="margin:7px 0">${e(state.me.role==='field'?'My request':name(c.field_id))} · ${fmt(c.created_at)}</div><span class="chip ${c.status}">${c.status}</span> ${c.assigned_to?`<span class="small muted">${e(name(c.assigned_to))}</span>`:''}</button>`).join(''):'<p class="muted small">No conversations found.</p>'}</div></div>`}
 async function selectCase(id){state.selected=id;await loadSelected()}
 function currentStep(c){if(!c||c.status!=='ai')return null;const steps=state.steps.filter(s=>s.article_id===c.article_id);return steps.find(s=>!state.attempts.some(a=>a.step_id===s.id))||null}
@@ -56,10 +140,24 @@ function resolvePrompt(id){const n=prompt('Resolution note (required):');if(n!==
 function reassignPrompt(id){const agents=state.profiles.filter(p=>p.role==='agent'&&p.enabled);const txt=agents.map(p=>p.username+': '+p.display_name).join('\n');const target=prompt('Enter agent username:\n'+txt);if(!target)return;const p=agents.find(a=>a.username.toLowerCase()===target.toLowerCase().trim());if(!p){alert('Unknown agent');return}callRpc('reassign_case',{p_case_id:id,p_agent_id:p.id})}
 
 function monitorPage(){if(state.me.role==='field')return '';const active=state.cases.filter(c=>c.status==='ai');const queues=state.cases.filter(c=>c.status==='queued');return `<div class="pagehead"><div><h2>AI conversation monitoring</h2><p class="muted">See every active troubleshooting request, attempted solutions and escalation status.</p></div>${btn('Refresh','refresh()','alt sm')}</div><div class="cards"><div class="card"><span class="muted small">Currently using Resolve</span><div class="metric">${active.length}</div></div><div class="card"><span class="muted small">Awaiting human</span><div class="metric">${queues.length}</div></div><div class="card"><span class="muted small">Agent-connected</span><div class="metric">${state.cases.filter(c=>c.status==='assigned').length}</div></div></div><div class="card"><h3>Live AI sessions</h3>${active.map(c=>{const steps=state.steps.filter(x=>x.article_id===c.article_id);return `<button class="caseitem" style="width:100%;text-align:left" onclick="state.tab='inbox';state.selected='${c.id}';loadSelected()"><b>${e(c.subject)}</b><div class="small muted">${e(name(c.field_id))} · ${fmt(c.created_at)} · ${steps.length} configured steps · View conversation →</div></button>`}).join('')||'<p class="muted">There are no active AI sessions.</p>'}</div><div class="card" style="margin-top:12px"><h3>Waiting for a human agent</h3>${queues.map(c=>`<button class="caseitem" style="width:100%;text-align:left" onclick="state.tab='inbox';state.selected='${c.id}';loadSelected()"><b>${e(c.subject)}</b> · ${duration(queueMs(c))}</button>`).join('')||'<p class="muted">The queue is empty.</p>'}</div>`}
-function knowledgePage(){if(state.me.role!=='manager')return '<div class="notice">Manager access required.</div>';return `<div class="pagehead"><div><h2>Errors & solutions</h2><p class="muted">Manager-controlled troubleshooting knowledge base. Field employees see only active articles.</p></div>${btn('+ Add troubleshooting guide','editKnowledge()','sm')}</div><div class="kb-grid">${state.articles.map(a=>{const steps=state.steps.filter(x=>x.article_id===a.id);return `<div class="card kb-entry"><div class="actions"><span class="chip ${a.active?'assigned':'resolved'}">${a.active?'Active':'Disabled'}</span></div><h3>${e(a.title)}</h3><div class="small muted">Keywords: ${e(a.keywords||'—')}</div><ol>${steps.map(x=>`<li>${e(x.instructions)}</li>`).join('')}</ol><div class="actions">${btn('Edit steps',`editKnowledge('${a.id}')`,'alt sm')}${btn(a.active?'Disable':'Enable',`toggleKnowledge('${a.id}',${!a.active})`,'soft sm')}</div></div>`}).join('')}</div><p class="highlightnote">Updates are saved to Supabase for all users. You must run the accompanying SQL upgrade first to enable secure manager-only editing.</p>`}
+function knowledgePage(){if(state.me.role!=='manager')return '<div class="notice">Manager access required.</div>';return `<div class="pagehead"><div><h2>Errors & solutions</h2><p class="muted">Manager-controlled troubleshooting knowledge base. Deleted guides are removed from this list; completed conversation history is retained.</p></div>${btn('+ Add troubleshooting guide','editKnowledge()','sm')}</div><div class="kb-grid">${state.articles.filter(a=>!a.deleted_at).map(a=>{const steps=state.steps.filter(x=>x.article_id===a.id);return `<div class="card kb-entry"><div class="actions"><span class="chip ${a.active?'assigned':'resolved'}">${a.active?'Active':'Disabled'}</span></div><h3>${e(a.title)}</h3><div class="small muted">Keywords: ${e(a.keywords||'—')}</div><ol>${steps.map(x=>`<li>${e(x.instructions)}</li>`).join('')}</ol><div class="actions">${btn('Edit steps',`editKnowledge('${a.id}')`,'alt sm')}${btn(a.active?'Disable':'Enable',`toggleKnowledge('${a.id}',${!a.active})`,'soft sm')}${btn('Delete',`deleteKnowledge('${a.id}')`,'danger sm')}</div></div>`}).join('')}</div><p class="highlightnote">Updates are saved to Supabase for all users. You must run the accompanying SQL upgrade first to enable secure manager-only editing.</p>`}
 function editKnowledge(id){if(state.me.role!=='manager')return;const a=state.articles.find(x=>x.id===id);const steps=a?state.steps.filter(x=>x.article_id===a.id).map(x=>x.instructions):[];document.body.insertAdjacentHTML('beforeend',`<div id="overlay" class="overlay"><div class="modal"><h2>${a?'Edit troubleshooting':'New troubleshooting guide'}</h2><form onsubmit="saveKnowledge(event,'${id||''}')"><label>Issue name</label><input id="kbtitle" maxlength="200" value="${e(a?.title||'')}" required><label>Search keywords (space-separated)</label><input id="kbkeywords" maxlength="1500" value="${e(a?.keywords||'')}"><label>Solutions — one per line, in order</label><textarea id="kbsteps" rows="10" required>${e(steps.join('\n'))}</textarea><div class="actions" style="margin-top:14px"><button class="btn" type="submit">Save guide</button>${btn('Cancel',"document.getElementById('overlay').remove()",'alt')}</div></form></div></div>`)}
 async function saveKnowledge(ev,id){ev.preventDefault();const title=document.getElementById('kbtitle').value.trim(),keywords=document.getElementById('kbkeywords').value.trim(),steps=document.getElementById('kbsteps').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);if(!title||!steps.length||steps.length>30){alert('Enter a title and between 1 and 30 steps.');return}try{const r=await api().rpc('admin_save_article',{p_id:id||null,p_title:title,p_keywords:keywords,p_steps:steps});if(r.error)throw r.error;document.getElementById('overlay').remove();await refresh()}catch(err){fail(err)}}
 async function toggleKnowledge(id,enabled){if(state.me.role!=='manager')return;const a=state.articles.find(x=>x.id===id);if(!a)return;try{const r=await api().rpc('admin_set_article_active',{p_id:id,p_active:enabled});if(r.error)throw r.error;await refresh()}catch(err){fail(err)}}
+async function deleteKnowledge(id){
+  if(state.me?.role!=='manager')return;
+  const guide=state.articles.find(a=>a.id===id&&!a.deleted_at);
+  if(!guide)return;
+  const warning=`Delete the troubleshooting guide “${guide.title}”?\n\nUnused guides will be permanently deleted. Guides linked to completed conversations will be archived (hidden from new requests) to preserve their history.\n\nGuides currently being used in open conversations cannot be deleted.`;
+  if(!window.confirm(warning))return;
+  try{
+    const {data,error}=await api().rpc('admin_delete_article',{p_id:id});
+    if(error)throw error;
+    state.alert='';
+    await refresh();
+    window.alert(data==='archived'?'Guide archived successfully. Historical conversations are preserved.':'Guide permanently deleted.');
+  }catch(err){fail(err)}
+}
 function returnToAI(id){callRpc('return_case_to_ai',{p_case_id:id})}
 
 function overview(){const cs=state.cases;const waiting=cs.filter(c=>c.status==='queued');const agent=state.me.role==='agent';return `<div class="pagehead"><div><h2>Call centre overview</h2><p class="muted">${agent?'Monitor AI conversations and handle assigned requests.':'Live view of Technical Support.'}</p></div><div class="toolbar">${agent?`<select style="max-width:170px" onchange="setPresence(this.value)">${['offline','available','busy'].map(x=>`<option value="${x}" ${state.me.agent_state===x?'selected':''}>${x}</option>`).join('')}</select>`:''}${btn('Refresh','refresh()','alt sm')}</div></div><div class="cards"><div class="card"><span class="muted small">AI assisting</span><div class="metric">${cs.filter(c=>c.status==='ai').length}</div></div><div class="card"><span class="muted small">Waiting in queue</span><div class="metric">${waiting.length}</div></div><div class="card"><span class="muted small">With an agent</span><div class="metric">${cs.filter(c=>c.status==='assigned').length}</div></div><div class="card"><span class="muted small">Resolved</span><div class="metric">${cs.filter(c=>c.status==='resolved').length}</div></div></div><div class="grid2"><div class="card"><h3>Agent availability</h3>${state.profiles.filter(p=>p.role==='agent').map(p=>`<div style="padding:9px 0;border-bottom:1px solid #eef2f7"><b>${e(p.display_name)}</b><span class="muted small" style="float:right">${e(p.agent_state)} · ${cs.filter(c=>c.assigned_to===p.id&&c.status==='assigned').length}/${p.max_chats}</span></div>`).join('')}</div><div class="card"><h3>Oldest waiting conversations</h3>${waiting.sort((a,b)=>a.queued_at.localeCompare(b.queued_at)).slice(0,8).map(c=>`<div style="padding:10px 0;border-bottom:1px solid #eef2f7"><b>${e(c.subject)}</b><span style="float:right" class="small muted">${duration(queueMs(c))}</span></div>`).join('')||'<p class="muted">No one is waiting.</p>'}<div style="margin-top:16px">${btn('Open all conversations',"state.tab='inbox';render()",'soft')}</div></div></div>`}
@@ -72,7 +170,52 @@ const csv=v=>'"'+String(v??'').replace(/"/g,'""')+'"';function downloadCsv(filen
 async function allRows(table,order='created_at'){const result=[];for(let i=0;;i++){const r=await api().from(table).select('*').order(order).range(i*500,(i+1)*500-1);if(r.error)throw r.error;result.push(...r.data);if(r.data.length<500)break;}return result}
 async function exportSummary(){try{const cases=await allRows('cases');const rows=[['ID','Created','Field username','Subject','Article ID','Status','Assigned agent','Queued at','Assigned at','Resolved at','Queue wait seconds','Resolution seconds','Resolution note'],...cases.map(c=>[c.id,c.created_at,state.profiles.find(p=>p.id===c.field_id)?.username,c.subject,c.article_id,c.status,name(c.assigned_to),c.queued_at,c.assigned_at,c.resolved_at,queueMs(c)==null?'':Math.round(queueMs(c)/1000),resolveMs(c)==null?'':Math.round(resolveMs(c)/1000),c.resolution])];downloadCsv('resolve-conversations-'+new Date().toISOString().slice(0,10)+'.csv',rows)}catch(err){fail(err)}}
 async function exportTranscripts(){try{const cases=await allRows('cases');const messages=await allRows('messages','id');const map=new Map(cases.map(c=>[c.id,c]));const rows=[['Case ID','Issue','Case status','Message ID','Timestamp','Sender','Sender type','Message'],...messages.map(m=>[m.case_id,map.get(m.case_id)?.subject,map.get(m.case_id)?.status,m.id,m.created_at,m.author_id?name(m.author_id):'Resolve assistant',m.author_kind,m.body])];downloadCsv('resolve-full-transcripts-'+new Date().toISOString().slice(0,10)+'.csv',rows)}catch(err){fail(err)}}
-function accounts(){if(state.me.role!=='manager')return '';return `<div class="pagehead"><h2>Account management</h2></div><div class="grid2"><div class="card"><h3>Create an approved account</h3><p class="muted small">Use the server-side account function. The temporary password must be shared privately and changed on first sign-in.</p><form onsubmit="createAccount(event)"><label>Username / employee ID</label><input id="newuser" required minlength="3" maxlength="40" pattern="[A-Za-z0-9._-]+"><label>Full name</label><input id="newname" required><label>Access type</label><select id="newrole"><option value="field">Field employee</option><option value="agent">Call centre agent</option></select><label>Temporary password (12+ characters)</label><input id="temppass" type="password" required minlength="12" autocomplete="new-password"><div style="height:14px"></div><button class="btn">Create account</button></form></div><div class="card"><h3>Existing users</h3><div class="tablewrap"><table style="min-width:400px"><thead><tr><th>Username</th><th>Name</th><th>Role</th></tr></thead><tbody>${state.profiles.map(p=>`<tr><td>${e(p.username)}</td><td>${e(p.display_name)}</td><td>${e(p.role)}</td></tr>`).join('')}</tbody></table></div><p class="small muted">Agent settings can be changed in Agent team. Password resets and account removals should be handled through a controlled administrator process.</p></div></div>`}
-async function createAccount(ev){ev.preventDefault();try{const username=document.getElementById('newuser').value.trim(),display_name=document.getElementById('newname').value.trim(),role=document.getElementById('newrole').value,password=document.getElementById('temppass').value;const {data,error}=await api().functions.invoke('accounts',{body:{username,display_name,role,password}});if(error)throw error;if(data?.error)throw Error(data.error);state.alert='Account created for '+username+'. Share the temporary password privately.';await refresh()}catch(err){fail(err)}}
+function accounts(){
+ if(state.me.role!=='manager')return '';
+ const current=state.profiles.filter(p=>p.enabled);
+ return `<div class="pagehead"><div><h2>Account management</h2><p class="muted small">Create Field, Agent or Manager access · Reset PINs · Remove accounts</p></div></div>
+ <div class="grid2"><div class="card"><h3>Create an approved account</h3>
+ <p class="muted small">New accounts use a temporary 6-digit PIN that must be changed on first sign-in. Set up MFA for manager users.</p>
+ <form onsubmit="createAccount(event)">
+ <label>Username / employee ID</label><input id="newuser" required minlength="3" maxlength="40" pattern="[A-Za-z0-9._-]+" autocomplete="off">
+ <label>Full name</label><input id="newname" required maxlength="100" autocomplete="off">
+ <label>Access type</label><select id="newrole"><option value="field">Field employee</option><option value="agent">Call Centre Agent</option><option value="manager">Manager / Administrator</option></select>
+ <label>Temporary six-digit PIN</label><input id="temppass" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" minlength="6" required autocomplete="new-password" placeholder="••••••">
+ <div style="height:14px"></div><button class="btn">Create account</button></form></div>
+ <div class="card"><h3>Existing users (${current.length})</h3><div class="tablewrap"><table style="min-width:580px"><thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Actions</th></tr></thead><tbody>
+ ${current.map(p=>`<tr><td>${e(p.username)}</td><td>${e(p.display_name)}</td><td>${e(p.role)}</td><td><div class="actions">${btn('Reset PIN',`resetPinPrompt('${p.id}')`,'alt sm')}${p.id===state.me.id?'<span class="small muted">Current account</span>':btn('Delete user',`deleteAccount('${p.id}')`,'danger sm')}</div></td></tr>`).join('')}
+ </tbody></table></div><p class="small muted">Deleting a login removes Supabase Auth access. Existing support transcripts remain available for reporting using an anonymised former-user record.</p></div></div>
+ <div class="note" style="margin-top:16px">Six-digit PINs on a publicly accessible website are vulnerable to guessing. Require manager MFA, configure Auth rate limits, and obtain your company’s security approval before real use.</div>`;
+}
+async function invokeAccounts(body){
+ const {data,error}=await api().functions.invoke('accounts',{body});
+ if(error){let reason=error.message||'Edge Function failed';try{if(error.context&&typeof error.context.json==='function'){const details=await error.context.json();reason=details.error||details.message||reason}}catch{}throw Error(reason)}
+ if(data?.error)throw Error(data.error);
+ return data;
+}
+async function createAccount(ev){ev.preventDefault();try{
+ const username=document.getElementById('newuser').value.trim(),display_name=document.getElementById('newname').value.trim(),role=document.getElementById('newrole').value,pin=document.getElementById('temppass').value;
+ if(!/^[0-9]{6}$/.test(pin))throw Error('PIN must contain exactly six digits');
+ await invokeAccounts({action:'create',username,display_name,role,password:pin});
+ state.alert='Account created for '+username+'. Share the temporary PIN privately.';await refresh();
+ }catch(err){fail(err)}
+}
+async function resetPinPrompt(id){
+ if(state.me.role!=='manager')return;
+ const p=state.profiles.find(x=>x.id===id);if(!p)return;
+ const pin=prompt('Enter a new temporary six-digit PIN for '+p.display_name+':');
+ if(pin===null)return;
+ if(!/^[0-9]{6}$/.test(pin)){state.alert='PIN must contain exactly six digits.';render();return}
+ if(!confirm('Reset the PIN for '+p.display_name+'? They must change it at next login.'))return;
+ try{await invokeAccounts({action:'reset_pin',user_id:id,password:pin});state.alert='Temporary PIN reset for '+p.display_name;await refresh()}catch(err){fail(err)}
+}
+async function deleteAccount(id){
+ if(state.me.role!=='manager'||id===state.me.id)return;
+ const p=state.profiles.find(x=>x.id===id);if(!p)return;
+ const typed=prompt('Delete login for '+p.display_name+'? Type the username '+p.username+' to confirm.\n\nExisting conversation history will be retained.');
+ if(typed!==p.username)return;
+ try{await invokeAccounts({action:'delete',user_id:id});state.alert='Access removed for '+p.username;await refresh()}catch(err){fail(err)}
+}
+
 (async()=>{try{if(CONFIG.url.startsWith('https://')&&!CONFIG.anon.startsWith('REPLACE_')&&window.supabase){state.client=window.supabase.createClient(CONFIG.url,CONFIG.anon,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}});const {data}=await state.client.auth.getSession();if(data.session){state.user=data.session.user;await initSession();return}}}catch(err){state.alert=err.message}home()})();
 </script></body></html>
