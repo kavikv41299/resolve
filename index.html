@@ -58,6 +58,16 @@
 [data-theme="dark"] .active-dot{background:#47e4a7}
 @media(max-width:650px){.entry{padding:18px}.entry h1{font-size:clamp(34px,9vw,50px);margin:30px 0 18px}.portals{gap:12px}.portal{min-height:164px}.logo-caption{font-size:11px}.verisure-logo{width:130px;height:66px}}
 
+
+/* Field request cooldown + agent-verified resolution + reporting date filters */
+.cooldown-notice{border:1px solid #b8cefa;background:#edf4ff;color:#255083;border-radius:12px;padding:13px 15px;margin:14px 0;font-size:13px}
+.cooldown-notice.ready{border-color:#b8e1c9;background:#ecfaf1;color:#216748}
+.report-dates{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:12px 0 17px}
+.report-dates label{margin:0 0 5px}
+.report-dates input{max-width:180px}
+.report-dates .field{display:flex;flex-direction:column;min-width:145px}
+.report-explanation{font-size:12px;color:var(--muted,#6b778b);margin-bottom:15px}
+@media(max-width:620px){.report-dates .field{flex:1;min-width:125px}.report-dates input{width:100%;max-width:none}}
 </style></head><body><div id="app"></div><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script><script>
 /* Public project credentials only; the SERVICE_ROLE key must NEVER be placed here. */
 const CONFIG={url:'https://qegoaryhedsttjcnvljz.supabase.co',anon:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFlZ29hcnloZWRzdHRqY252bGp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM3MTU1MzEsImV4cCI6MjEwOTI5MTUzMX0.OQpXIG42O6QgKVC2-Z9-MAoa8hnZlbAexol4LlSrtKw'};
@@ -69,7 +79,8 @@ function toggleTheme(){setTheme(theme()==='dark'?'light':'dark')}
 function themeButton(){return `<button type="button" class="theme-toggle" data-theme-toggle onclick="toggleTheme()">${theme()==='dark'?'☀ Light mode':'☾ Dark mode'}</button>`}
 function logoMark(){return `<img class="verisure-logo" src="https://asset.brandfetch.io/id98I3Kz6C/id-kzK5uj2.png?updated=1716597061125" alt="Verisure" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'brand-fallback',textContent:'verisure'}))">`}
 setTheme(theme());
-const el=document.getElementById('app');const state={reportRange:'all',client:null,user:null,me:null,portal:null,tab:'overview',cases:[],profiles:[],articles:[],steps:[],messages:[],attempts:[],selected:null,filter:'all',status:'',alert:'',channels:[],loginType:'field'};
+setInterval(updateRequestCountdown,1000);
+const el=document.getElementById('app');const state={reportRange:'all',reportStart:'',reportEnd:'',reportCases:null,reportLoading:false,client:null,user:null,me:null,portal:null,tab:'overview',cases:[],profiles:[],articles:[],steps:[],messages:[],attempts:[],selected:null,filter:'all',status:'',alert:'',channels:[],loginType:'field'};
 const e=s=>String(s??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const fmt=d=>d?new Date(d).toLocaleString('en-GB',{dateStyle:'short',timeStyle:'short'}):'—';
 const duration=ms=>ms==null?'—':ms<0?'—':Math.floor(ms/3600000)+'h '+String(Math.floor(ms%3600000/60000)).padStart(2,'0')+'m';
@@ -77,6 +88,38 @@ const queueMs=c=>c.queued_at?((c.assigned_at?Date.parse(c.assigned_at):c.status=
 const resolveMs=c=>c.resolved_at?Date.parse(c.resolved_at)-Date.parse(c.created_at):null;
 const avg=a=>a.length?duration(a.reduce((s,v)=>s+v,0)/a.length):'—';
 const name=id=>state.profiles.find(p=>p.id===id)?.display_name||'Unassigned';
+const FIELD_REQUEST_COOLDOWN_MS=4*60*1000;
+function lastFieldRequest(){
+ if(state.me?.role!=='field')return null;
+ const times=state.cases.filter(c=>c.field_id===state.me.id).map(c=>Date.parse(c.created_at)).filter(Number.isFinite);
+ return times.length?Math.max(...times):null;
+}
+function requestWaitMs(){const t=lastFieldRequest();return t==null?0:Math.max(0,t+FIELD_REQUEST_COOLDOWN_MS-Date.now())}
+function countdownText(ms){const seconds=Math.max(0,Math.ceil(ms/1000));return `${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;}
+function updateRequestCountdown(){
+ const node=document.getElementById('requestCountdown'), submit=document.getElementById('requestSubmit');
+ if(!node)return;
+ const wait=requestWaitMs();
+ node.textContent=wait?`You can open your next request in ${countdownText(wait)}. Continue chatting in your current request if you need help.`:'You can now open a new request.';
+ node.classList.toggle('ready',wait===0);
+ if(submit){submit.disabled=wait>0;submit.textContent=wait?'New request available shortly':'Start conversation →';}
+}
+function localDateISO(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+function localMidnightISO(s,addDays=0){const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d+addDays).toISOString();}
+function reportBounds(){
+ const today=new Date();let startDate=null,endDate=null;
+ if(state.reportRange==='today'){startDate=localDateISO(today);endDate=startDate}
+ else if(state.reportRange==='7d'||state.reportRange==='30d'){
+  const d=new Date(today.getFullYear(),today.getMonth(),today.getDate()-(state.reportRange==='7d'?6:29));
+  startDate=localDateISO(d);endDate=localDateISO(today);
+ } else if(state.reportRange==='custom'){
+  startDate=state.reportStart;endDate=state.reportEnd;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(startDate)||!/^\d{4}-\d{2}-\d{2}$/.test(endDate)||startDate>endDate)throw Error('Choose a valid From and To date (From must not be later than To).');
+ }
+ return {start:startDate?localMidnightISO(startDate):null,end:endDate?localMidnightISO(endDate,1):null,from:startDate,to:endDate};
+}
+function reportLabel(){const b=reportBounds();return b.from?`${b.from} to ${b.to}`:'all-dates'}
+
 const api=()=>{if(!state.client)throw Error('Supabase is not configured. Open index.html and set CONFIG.');return state.client};
 const fail=x=>{state.alert=x.message||String(x);render()};
 const showAlert=()=>state.alert?`<div class="notice error" role="alert">${e(state.alert)}</div>`:'';
@@ -120,16 +163,47 @@ function subscribe(){state.channels.forEach(ch=>api().removeChannel(ch));state.c
 async function logout(){try{if(state.me?.role==='agent')await api().rpc('set_my_presence',{p_state:'offline'});await api().auth.signOut()}catch{}state.channels.forEach(ch=>api().removeChannel(ch));Object.assign(state,{user:null,me:null,portal:null,selected:null,cases:[],messages:[],alert:''});home()}
 function header(){return `<header class="top"><div class="brand-lockup">${logoMark()}<span class="logo-caption">Resolve</span></div><div class="topright">${themeButton()}<span class="muted">${e(state.me.display_name)} · ${e(state.me.role)}</span>${btn('Sign out','logout()','alt sm')}</div></header>`}
 
-function nav(){const tabs=state.me.role==='field'?[['conversations','My conversations'],['new','Ask Resolve']]:[['overview','Overview'],['inbox','Live conversations'],['monitor','AI monitoring'],['team','Agent team'],...(state.me.role==='manager'?[['knowledge','Knowledge base'],['reports','Reports & exports'],['accounts','Account management']]:[])];return `<aside class="sidebar">${tabs.map(([id,title])=>`<button class="${state.tab===id?'active':''}" onclick="state.tab='${id}';state.filter='all';render()">${title}</button>`).join('')}</aside>`}
+function nav(){const tabs=state.me.role==='field'?[['conversations','My conversations'],['new','Ask Resolve']]:[['overview','Overview'],['inbox','Live conversations'],['monitor','AI monitoring'],['team','Agent team'],...(state.me.role==='manager'?[['knowledge','Knowledge base'],['reports','Reports & exports'],['accounts','Account management']]:[])];return `<aside class="sidebar">${tabs.map(([id,title])=>`<button class="${state.tab===id?'active':''}" onclick="openTab('${id}')">${title}</button>`).join('')}</aside>`}
+async function openTab(id){
+ state.tab=id;state.filter='all';
+ if(id==='reports'&&state.me?.role==='manager')await loadReportCases();
+ else render();
+}
 function render(){if(!state.me){if(state.loginType)login(state.loginType);else home();return}if(state.me.must_change_password){passwordModal();return}if(state.portal==='field'&&!['new','conversations'].includes(state.tab))state.tab='conversations';if(state.portal==='staff'&&!['overview','inbox','monitor','team','knowledge','reports','accounts'].includes(state.tab))state.tab='overview';let content='';if(state.tab==='new')content=newRequest();else if(state.tab==='conversations'||state.tab==='inbox')content=inbox();else if(state.tab==='monitor')content=monitorPage();else if(state.tab==='knowledge')content=knowledgePage();else if(state.tab==='overview')content=overview();else if(state.tab==='team')content=team();else if(state.tab==='reports')content=reports();else if(state.tab==='accounts')content=accounts();el.innerHTML=`<div class="shell">${header()}<div class="layout">${nav()}<main class="main">${showAlert()}${content}<div class="footer">Resolve · Protected by Supabase authentication and database policies · Times shown in your browser's timezone</div></main></div></div>`;const msgs=document.getElementById('messages');if(msgs)msgs.scrollTop=msgs.scrollHeight}
 function scoredArticles(question){const q=String(question||'').toLowerCase();const words=q.match(/[a-z0-9]{3,}/g)||[];return state.articles.filter(a=>a.active).map(a=>{const title=a.title.toLowerCase(),keys=(a.keywords||'').toLowerCase().split(/[,;\s]+/).filter(x=>x.length>2);let score=(q.includes(title)?15:0);for(const w of words){if(title.includes(w))score+=3;if(keys.includes(w))score+=5;}return {a,score}}).filter(x=>x.score>0).sort((a,b)=>b.score-a.score)}
 function showSuggestion(){const question=document.getElementById('subject')?.value||'';const matches=scoredArticles(question),pick=document.getElementById('article'),hint=document.getElementById('matchHint');if(!pick||!hint)return;if(pick.dataset.manual!=='1'){pick.value=matches.length?matches[0].a.id:''}hint.textContent=matches.length?'Suggested guide: '+matches[0].a.title+' (please verify it matches your issue).':'No approved guide matched yet. Your question will go to a human agent.'}
-function newRequest(){return `<div class="pagehead"><div><h2>Ask Resolve</h2><p class="muted">Describe an error in your own words. Resolve suggests an approved guide or transfers you to Technical Support.</p></div></div><div class="card" style="max-width:720px"><form onsubmit="createCase(event)"><label>What is the error or question?</label><textarea id="subject" required maxlength="300" oninput="showSuggestion()" placeholder="For example: Starkey isn't arming after replacement"></textarea><label>Matched troubleshooting guide</label><select id="article" data-manual="0" onchange="this.dataset.manual='1'"><option value="">No matching guide — human support</option>${state.articles.filter(a=>a.active).map(a=>`<option value="${a.id}">${e(a.title)}</option>`).join('')}</select><div id="matchHint" class="highlightnote">Type your question to get a guide suggestion.</div><p class="muted small">This assistant uses approved, step-by-step procedures, not a generative AI model. You can request a human at any time.</p><p class="muted small">Do not include customer passwords, alarm codes or unnecessary personal information.</p><div style="height:12px"></div><button class="btn">Start conversation →</button></form></div>`}
-async function createCase(ev){ev.preventDefault();try{const subject=document.getElementById('subject').value.trim();const aid=document.getElementById('article').value;const r=await api().rpc('create_case',{p_subject:subject,p_article_id:aid||null});if(r.error)throw r.error;state.selected=r.data;await refresh(false);state.tab='conversations';render()}catch(err){fail(err)}}
+function newRequest(){
+ const wait=requestWaitMs();
+ return `<div class="pagehead"><div><h2>Ask Resolve</h2><p class="muted">Start one new request every four minutes. You can continue using existing conversations while waiting.</p></div></div>
+ <div class="card" style="max-width:720px">
+ <div id="requestCountdown" class="cooldown-notice ${wait===0?'ready':''}" role="status" aria-live="polite">${wait?`You can open your next request in ${countdownText(wait)}. Continue chatting in your existing request if needed.`:'You can now open a new request.'}</div>
+ <form onsubmit="createCase(event)">
+ <label>What is the error or question?</label><textarea id="subject" required maxlength="300" oninput="showSuggestion()" placeholder="For example: Starkey isn't arming after replacement"></textarea>
+ <label>Matched troubleshooting guide</label><select id="article" data-manual="0" onchange="this.dataset.manual='1'"><option value="">No matching guide — human support</option>${state.articles.filter(a=>a.active&&!a.deleted_at).map(a=>`<option value="${a.id}">${e(a.title)}</option>`).join('')}</select>
+ <div id="matchHint" class="highlightnote">Type your question to get a guide suggestion.</div>
+ <p class="muted small">Resolve suggests approved solutions; only your assigned Technical Support agent can mark a conversation as resolved. If a solution works, the agent will verify it before closure.</p>
+ <p class="muted small">Do not share customer passwords, alarm codes or unnecessary personal data.</p>
+ <div style="height:12px"></div><button class="btn" id="requestSubmit" type="submit" ${wait?'disabled':''}>${wait?'New request available shortly':'Start conversation →'}</button>
+ </form></div>`;
+}
+async function createCase(ev){
+ ev.preventDefault();
+ if(requestWaitMs()>0){state.alert='Please wait '+countdownText(requestWaitMs())+' before opening another request.';render();return;}
+ const submit=document.getElementById('requestSubmit');if(submit)submit.disabled=true;
+ try{
+  const subject=document.getElementById('subject').value.trim();
+  const aid=document.getElementById('article').value;
+  const r=await api().rpc('create_case',{p_subject:subject,p_article_id:aid||null});
+  if(r.error)throw r.error;
+  state.selected=r.data;
+  await refresh(false);
+  state.tab='conversations';state.alert='';render();
+ }catch(err){if(submit)submit.disabled=false;fail(err)}
+}
 function caseList(){let cases=state.cases;if(state.filter!=='all')cases=cases.filter(c=>c.status===state.filter);return `<div class="card"><div class="pagehead"><b>Conversations (${cases.length})</b><select style="max-width:130px" onchange="state.filter=this.value;render()"><option value="all" ${state.filter==='all'?'selected':''}>All</option>${['ai','queued','assigned','resolved'].map(s=>`<option ${s===state.filter?'selected':''} value="${s}">${s}</option>`).join('')}</select></div><div class="list">${cases.length?cases.map(c=>`<button class="caseitem ${state.selected===c.id?'sel':''}" onclick="selectCase('${c.id}')"><b>${e(c.subject)}</b><div class="small muted" style="margin:7px 0">${e(state.me.role==='field'?'My request':name(c.field_id))} · ${fmt(c.created_at)}</div><span class="chip ${c.status}">${c.status}</span> ${c.assigned_to?`<span class="small muted">${e(name(c.assigned_to))}</span>`:''}</button>`).join(''):'<p class="muted small">No conversations found.</p>'}</div></div>`}
 async function selectCase(id){state.selected=id;await loadSelected()}
 function currentStep(c){if(!c||c.status!=='ai')return null;const steps=state.steps.filter(s=>s.article_id===c.article_id);return steps.find(s=>!state.attempts.some(a=>a.step_id===s.id))||null}
-function chatPanel(){const c=state.cases.find(x=>x.id===state.selected);if(!c)return `<div class="card"><p class="muted">Choose a conversation to view the full history.</p></div>`;const isField=state.me.role==='field';const canReply=c.status==='assigned'&&(isField||state.me.role==='manager'||c.assigned_to===state.me.id);const step=currentStep(c);const steps=state.steps.filter(s=>s.article_id===c.article_id),done=state.attempts.length;const canTake=!isField&&c.status!=='resolved'&&c.assigned_to!==state.me.id&&(state.me.role==='manager'||state.me.can_takeover)&&c.status!=='assigned';const canResolve=!isField&&c.status!=='resolved'&&(state.me.role==='manager'||c.assigned_to===state.me.id);const canReturn=!isField&&c.status==='assigned'&&(state.me.role==='manager'||c.assigned_to===state.me.id)&&c.article_id&&step;return `<div class="card chat"><div class="chat-head"><div><b>${e(c.subject)}</b><div class="small muted">${e(name(c.field_id))} · ${e(name(c.assigned_to))} · <span class="chip ${c.status}">${c.status}</span></div></div><div class="actions">${canTake?btn('Take over',`takeover('${c.id}')`,'sm'):''}${canReturn?btn('Return to assistant',`returnToAI('${c.id}')`,'alt sm'):''}${!isField&&state.me.role==='manager'&&c.status!=='resolved'?btn('Reassign',`reassignPrompt('${c.id}')`,'alt sm'):''}${canResolve?btn('Resolve',`resolvePrompt('${c.id}')`,'soft sm'):''}</div></div><div class="messages" id="messages">${state.messages.map(m=>`<div class="bubble ${m.author_id===state.me.id?'own':''} ${m.author_kind==='system'?'system':''}"><div>${e(m.body)}</div><small>${m.author_kind==='system'?'Resolve assistant / system':e(name(m.author_id))} · ${fmt(m.created_at)}</small></div>`).join('')}</div>${c.status==='ai'&&step?`<div class="ai-banner"><strong>◈ Resolve guided assistant · Step ${done+1} of ${steps.length}</strong><div class="step-progress"><span style="width:${Math.round(done/Math.max(steps.length,1)*100)}%"></span></div><p>${e(step.instructions)}</p>${isField?`<div class="actions" style="margin-top:12px">${btn('✓ This fixed it',`tryStep('${c.id}','${step.id}',true)`,'sm')}${btn('Still not working →',`tryStep('${c.id}','${step.id}',false)`,'alt sm')}</div>`:'<p class="small muted">Read-only monitoring. You can take over if authorised.</p>'}</div>`:''}${isField&&c.status==='ai'?`<div class="actions" style="padding:12px 0">${btn('Talk to a human agent',`escalate('${c.id}')`,'soft sm')}</div>`:''}${c.status==='queued'?`<div class="notice small">Waiting for the next eligible agent · Current queue wait: ${duration(queueMs(c))}</div>`:''}${canReply?`<form class="compose" onsubmit="sendMessage(event)"><input id="chattext" placeholder="Type a message…" maxlength="10000" required aria-label="Message"><button class="btn" type="submit">Send</button></form>`:`<p class="muted small">${c.status==='resolved'?'This conversation is resolved.':c.status==='ai'?'Resolve is guiding the field colleague.':'Waiting or monitoring only.'}</p>`}</div>`}
+function chatPanel(){const c=state.cases.find(x=>x.id===state.selected);if(!c)return `<div class="card"><p class="muted">Choose a conversation to view the full history.</p></div>`;const isField=state.me.role==='field';const canReply=c.status==='assigned'&&(isField||state.me.role==='manager'||c.assigned_to===state.me.id);const step=currentStep(c);const steps=state.steps.filter(s=>s.article_id===c.article_id),done=state.attempts.length;const canTake=!isField&&c.status!=='resolved'&&c.assigned_to!==state.me.id&&(state.me.role==='manager'||state.me.can_takeover)&&c.status!=='assigned';const canResolve=state.me.role==='agent'&&c.status==='assigned'&&c.assigned_to===state.me.id;const canReturn=!isField&&c.status==='assigned'&&(state.me.role==='manager'||c.assigned_to===state.me.id)&&c.article_id&&step;return `<div class="card chat"><div class="chat-head"><div><b>${e(c.subject)}</b><div class="small muted">${e(name(c.field_id))} · ${e(name(c.assigned_to))} · <span class="chip ${c.status}">${c.status}</span></div></div><div class="actions">${canTake?btn('Take over',`takeover('${c.id}')`,'sm'):''}${canReturn?btn('Return to assistant',`returnToAI('${c.id}')`,'alt sm'):''}${!isField&&state.me.role==='manager'&&c.status!=='resolved'?btn('Reassign',`reassignPrompt('${c.id}')`,'alt sm'):''}${canResolve?btn('Resolve',`resolvePrompt('${c.id}')`,'soft sm'):''}</div></div><div class="messages" id="messages">${state.messages.map(m=>`<div class="bubble ${m.author_id===state.me.id?'own':''} ${m.author_kind==='system'?'system':''}"><div>${e(m.body)}</div><small>${m.author_kind==='system'?'Resolve assistant / system':e(name(m.author_id))} · ${fmt(m.created_at)}</small></div>`).join('')}</div>${c.status==='ai'&&step?`<div class="ai-banner"><strong>◈ Resolve guided assistant · Step ${done+1} of ${steps.length}</strong><div class="step-progress"><span style="width:${Math.round(done/Math.max(steps.length,1)*100)}%"></span></div><p>${e(step.instructions)}</p>${isField?`<div class="actions" style="margin-top:12px">${btn('✓ Issue appears fixed — notify TS',`tryStep('${c.id}','${step.id}',true)`,'sm')}${btn('Still not working →',`tryStep('${c.id}','${step.id}',false)`,'alt sm')}</div>`:'<p class="small muted">Read-only monitoring. You can take over if authorised.</p>'}</div>`:''}${isField&&c.status==='ai'?`<div class="actions" style="padding:12px 0">${btn('Talk to a human agent',`escalate('${c.id}')`,'soft sm')}</div>`:''}${c.status==='queued'?`<div class="notice small">${c.field_reports_fixed_at?'Field has reported a fix. Waiting for a Technical Support agent to verify and close the request.':'Waiting for the next eligible agent.'} · Current queue wait: ${duration(queueMs(c))}</div>`:''}${canReply?`<form class="compose" onsubmit="sendMessage(event)"><input id="chattext" placeholder="Type a message…" maxlength="10000" required aria-label="Message"><button class="btn" type="submit">Send</button></form>`:`<p class="muted small">${c.status==='resolved'?'This conversation is resolved.':c.status==='ai'?'Resolve is guiding the field colleague.':'Waiting or monitoring only.'}</p>`}</div>`}
 function inbox(){return `<div class="pagehead"><h2>${state.me.role==='field'?'My support requests':'Live support conversations'}</h2>${state.me.role==='field'?btn('New request',"state.tab='new';render()",'sm'):btn('Refresh',"refresh()",'alt sm')}</div><div class="grid2">${caseList()}${chatPanel()}</div>`}
 async function callRpc(fn,args){try{const r=await api().rpc(fn,args);if(r.error)throw r.error;state.alert='';await refresh()}catch(err){fail(err)}}
 function sendMessage(ev){ev.preventDefault();const v=document.getElementById('chattext').value.trim();if(v)callRpc('post_message',{p_case_id:state.selected,p_body:v})}
@@ -165,11 +239,97 @@ async function setPresence(s){try{const r=await api().rpc('set_my_presence',{p_s
 function team(){const ps=state.profiles.filter(p=>p.role==='agent');const manager=state.me.role==='manager';return `<div class="pagehead"><h2>Agent team · ${ps.length} accounts</h2></div><div class="tablewrap"><table><thead><tr><th>Agent</th><th>Username</th><th>Availability</th><th>Active chats</th><th>Capacity</th>${manager?'<th>Permissions</th>':''}</tr></thead><tbody>${ps.map(p=>`<tr><td><b>${e(p.display_name)}</b>${!p.enabled?' · disabled':''}</td><td>${e(p.username)}</td><td><span class="chip">${e(p.agent_state)}</span></td><td>${state.cases.filter(c=>c.status==='assigned'&&c.assigned_to===p.id).length}</td><td>${p.max_chats}</td>${manager?`<td>${btn('Configure',`configureAgent('${p.id}')`,'alt sm')}</td>`:''}</tr>`).join('')}</tbody></table></div>`}
 function configureAgent(id){const p=state.profiles.find(x=>x.id===id);if(!p)return;el.insertAdjacentHTML('beforeend',`<div class="overlay" id="overlay"><form class="modal" onsubmit="saveAgent(event,'${id}')"><h2>${e(p.display_name)}</h2><p class="muted small">Permissions are verified by the database.</p><label>Maximum simultaneous chats</label><input type="number" id="maxchats" min="1" max="20" value="${p.max_chats}" required><label><input type="checkbox" id="enabled" style="width:auto" ${p.enabled?'checked':''}> Account enabled</label><label><input type="checkbox" id="monitor" style="width:auto" ${p.can_monitor?'checked':''}> Monitor all AI conversations</label><label><input type="checkbox" id="takeover" style="width:auto" ${p.can_takeover?'checked':''}> Take over AI conversations</label><label><input type="checkbox" id="reassign" style="width:auto" ${p.can_reassign?'checked':''}> Reassign conversations</label><div class="actions" style="margin-top:18px"><button type="submit" class="btn">Save settings</button>${btn('Cancel',"document.getElementById('overlay').remove()",'alt')}</div></form></div>`)}
 async function saveAgent(ev,id){ev.preventDefault();const obj={p_id:id,p_enabled:document.getElementById('enabled').checked,p_max_chats:Number(document.getElementById('maxchats').value),p_monitor:document.getElementById('monitor').checked,p_takeover:document.getElementById('takeover').checked,p_reassign:document.getElementById('reassign').checked};document.getElementById('overlay').remove();callRpc('admin_update_agent',obj)}
-function reports(){if(state.me.role!=='manager')return '';const cutoff=state.reportRange==='today'?new Date().setHours(0,0,0,0):state.reportRange==='7d'?Date.now()-7*86400000:state.reportRange==='30d'?Date.now()-30*86400000:0;const cs=state.cases.filter(c=>new Date(c.created_at).getTime()>=cutoff);const queued=cs.map(queueMs).filter(x=>x!=null&&x>=0),resolved=cs.map(resolveMs).filter(x=>x!=null&&x>=0);return `<div class="pagehead"><div><h2>Reporting & exports</h2><p class="muted">Operational timings and complete chat transcripts</p></div><div class="reportfilters"><select onchange="state.reportRange=this.value;render()">${[['all','All time'],['today','Today'],['7d','Last 7 days'],['30d','Last 30 days']].map(([v,t])=>`<option value="${v}" ${state.reportRange===v?'selected':''}>${t}</option>`).join('')}</select>${btn('Export summary CSV','exportSummary()','alt sm')}${btn('Export transcripts CSV','exportTranscripts()','sm')}</div></div><div class="cards"><div class="card"><span class="small muted">Conversations</span><div class="metric">${cs.length}</div></div><div class="card"><span class="small muted">Average queue wait</span><div class="metric" style="font-size:24px">${avg(queued)}</div></div><div class="card"><span class="small muted">Average resolution time</span><div class="metric" style="font-size:24px">${avg(resolved)}</div></div><div class="card"><span class="small muted">Resolved</span><div class="metric">${resolved.length}</div></div></div><div class="card" style="margin-top:16px"><h3>Individual agent performance</h3><div class="tablewrap"><table><thead><tr><th>Agent</th><th>Assigned</th><th>Resolved</th><th>Active</th><th>Average resolution</th></tr></thead><tbody>${state.profiles.filter(p=>p.role==='agent').map(p=>{const assigned=cs.filter(c=>c.assigned_to===p.id),closed=assigned.filter(c=>c.status==='resolved'),times=closed.map(resolveMs).filter(x=>x!=null);return `<tr><td>${e(p.display_name)}</td><td>${assigned.length}</td><td>${closed.length}</td><td>${assigned.filter(c=>c.status==='assigned').length}</td><td>${avg(times)}</td></tr>`}).join('')}</tbody></table></div></div><div class="note">Time definitions: queue wait = time from escalation to agent assignment; resolution time = time from case creation to closure. Open cases have no resolution duration. Reports show the latest 1,000 conversations in the live dashboard; exports fetch all records page by page.</div><div class="tablewrap"><table><thead><tr><th>Created</th><th>Issue</th><th>Field</th><th>Agent</th><th>Status</th><th>Queue wait</th><th>Resolution</th></tr></thead><tbody>${cs.slice(0,200).map(c=>`<tr><td>${fmt(c.created_at)}</td><td>${e(c.subject)}</td><td>${e(name(c.field_id))}</td><td>${e(name(c.assigned_to))}</td><td><span class="chip ${c.status}">${c.status}</span></td><td>${duration(queueMs(c))}</td><td>${duration(resolveMs(c))}</td></tr>`).join('')}</tbody></table></div>`}
-const csv=v=>'"'+String(v??'').replace(/"/g,'""')+'"';function downloadCsv(filename,rows){const blob=new Blob(['\ufeff'+rows.map(r=>r.map(csv).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
-async function allRows(table,order='created_at'){const result=[];for(let i=0;;i++){const r=await api().from(table).select('*').order(order).range(i*500,(i+1)*500-1);if(r.error)throw r.error;result.push(...r.data);if(r.data.length<500)break;}return result}
-async function exportSummary(){try{const cases=await allRows('cases');const rows=[['ID','Created','Field username','Subject','Article ID','Status','Assigned agent','Queued at','Assigned at','Resolved at','Queue wait seconds','Resolution seconds','Resolution note'],...cases.map(c=>[c.id,c.created_at,state.profiles.find(p=>p.id===c.field_id)?.username,c.subject,c.article_id,c.status,name(c.assigned_to),c.queued_at,c.assigned_at,c.resolved_at,queueMs(c)==null?'':Math.round(queueMs(c)/1000),resolveMs(c)==null?'':Math.round(resolveMs(c)/1000),c.resolution])];downloadCsv('resolve-conversations-'+new Date().toISOString().slice(0,10)+'.csv',rows)}catch(err){fail(err)}}
-async function exportTranscripts(){try{const cases=await allRows('cases');const messages=await allRows('messages','id');const map=new Map(cases.map(c=>[c.id,c]));const rows=[['Case ID','Issue','Case status','Message ID','Timestamp','Sender','Sender type','Message'],...messages.map(m=>[m.case_id,map.get(m.case_id)?.subject,map.get(m.case_id)?.status,m.id,m.created_at,m.author_id?name(m.author_id):'Resolve assistant',m.author_kind,m.body])];downloadCsv('resolve-full-transcripts-'+new Date().toISOString().slice(0,10)+'.csv',rows)}catch(err){fail(err)}}
+async function loadReportCases(){
+ if(state.me?.role!=='manager')return;
+ state.reportCases=null;state.reportLoading=true;state.alert='';render();
+ try{
+  const bounds=reportBounds();
+  const rows=[];
+  for(let offset=0;;offset+=500){
+   let q=api().from('cases').select('*').order('created_at',{ascending:false}).range(offset,offset+499);
+   if(bounds.start)q=q.gte('created_at',bounds.start);
+   if(bounds.end)q=q.lt('created_at',bounds.end);
+   const r=await q;if(r.error)throw r.error;
+   rows.push(...(r.data||[]));if((r.data||[]).length<500)break;
+  }
+  state.reportCases=rows;
+ }catch(err){state.alert=err.message||String(err);state.reportCases=null;}
+ finally{state.reportLoading=false;render()}
+}
+async function setReportRange(v){
+ state.reportRange=v;
+ if(v==='custom'&&(!state.reportStart||!state.reportEnd)){
+  const today=new Date();const start=new Date(today.getFullYear(),today.getMonth(),today.getDate()-6);
+  state.reportStart=localDateISO(start);state.reportEnd=localDateISO(today);
+ }
+ await loadReportCases();
+}
+async function applyReportDates(){
+ const from=document.getElementById('reportStart')?.value||'';
+ const to=document.getElementById('reportEnd')?.value||'';
+ if(!from||!to||from>to){state.alert='Choose valid From and To dates, with From on or before To.';render();return;}
+ state.reportStart=from;state.reportEnd=to;state.reportRange='custom';
+ await loadReportCases();
+}
+function reports(){
+ if(state.me.role!=='manager')return '';
+ const cs=state.reportCases||[];
+ const queued=cs.map(queueMs).filter(x=>x!=null&&x>=0);
+ const resolved=cs.map(resolveMs).filter(x=>x!=null&&x>=0);
+ const awaiting=cs.filter(c=>c.status==='queued');
+ const agents=state.profiles.filter(p=>p.role==='agent');
+ const body=cs.slice(0,200).map(c=>`<tr><td>${fmt(c.created_at)}</td><td>${e(c.subject)}</td><td>${e(name(c.field_id))}</td><td>${e(name(c.assigned_to))}</td><td><span class="chip ${c.status}">${c.status}</span></td><td>${duration(queueMs(c))}</td><td>${duration(resolveMs(c))}</td></tr>`).join('');
+ return `<div class="pagehead"><div><h2>Reporting & exports</h2><p class="muted">Choose a date range. Both CSV exports include ONLY conversations created within that range.</p></div>
+ <div class="reportfilters"><select aria-label="Date preset" onchange="setReportRange(this.value)">${[['all','All time'],['today','Today'],['7d','Last 7 days'],['30d','Last 30 days'],['custom','Custom dates']].map(([v,t])=>`<option value="${v}" ${state.reportRange===v?'selected':''}>${t}</option>`).join('')}</select>${btn('Export summary CSV','exportSummary()','alt sm')}${btn('Export transcripts CSV','exportTranscripts()','sm')}</div></div>
+ <div class="card report-dates" style="padding:14px 18px"><div class="field"><label for="reportStart">From date</label><input id="reportStart" type="date" value="${e(state.reportStart)}" aria-label="From date"></div><div class="field"><label for="reportEnd">To date</label><input id="reportEnd" type="date" value="${e(state.reportEnd)}" aria-label="To date"></div><button class="btn" onclick="applyReportDates()">Apply date range</button>${btn('Refresh','loadReportCases()','alt sm')}</div>
+ <p class="report-explanation">${state.reportLoading?'Loading selected reports from Supabase…':`Showing ${e(reportLabel())} by the field colleague’s request creation date (local timezone). End date is inclusive. ${cs.length} conversations loaded.`}</p>
+ ${state.reportLoading?'<div class="notice">Loading all conversations within the selected dates…</div>':''}
+ <div class="cards"><div class="card"><span class="small muted">Conversations</span><div class="metric">${cs.length}</div></div><div class="card"><span class="small muted">Average queue wait</span><div class="metric" style="font-size:24px">${avg(queued)}</div></div><div class="card"><span class="small muted">Average resolution time</span><div class="metric" style="font-size:24px">${avg(resolved)}</div></div><div class="card"><span class="small muted">Awaiting support</span><div class="metric">${awaiting.length}</div></div></div>
+ <div class="card" style="margin-top:16px"><h3>Individual agent performance</h3><div class="tablewrap"><table><thead><tr><th>Agent</th><th>Assigned</th><th>Resolved</th><th>Active</th><th>Average resolution</th></tr></thead><tbody>${agents.map(p=>{const assigned=cs.filter(c=>c.assigned_to===p.id),closed=assigned.filter(c=>c.status==='resolved'),times=closed.map(resolveMs).filter(x=>x!=null);return `<tr><td>${e(p.display_name)}</td><td>${assigned.length}</td><td>${closed.length}</td><td>${assigned.filter(c=>c.status==='assigned').length}</td><td>${avg(times)}</td></tr>`}).join('')}</tbody></table></div></div>
+ <div class="note">Queue wait = from entering the human queue until first assignment; resolution time = from the first request until the assigned agent closes it. Data is filtered by request creation date; an unresolved request does not count in average resolution. If an old case was reassigned, this table attributes it to its current/last agent.</div>
+ <div class="tablewrap"><table><thead><tr><th>Created</th><th>Issue</th><th>Field</th><th>Agent</th><th>Status</th><th>Queue wait</th><th>Resolution</th></tr></thead><tbody>${body||'<tr><td colspan="7" class="muted">No conversations in the selected date range.</td></tr>'}</tbody></table></div>`;
+}
+const csv=v=>{let s=String(v??'');if(/^[\s]*[=+@-]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"'};function downloadCsv(filename,rows){const blob=new Blob(['\ufeff'+rows.map(r=>r.map(csv).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
+async function currentReportCases(){
+ if(state.reportCases!==null)return state.reportCases;
+ if(state.reportLoading)throw Error('Report is still loading. Please try again when the selected date range has loaded.');
+ await loadReportCases();
+ if(state.reportCases===null)throw Error('Report data not available');
+ return state.reportCases;
+}
+function reportFileSuffix(){return reportLabel().replace(/[^0-9a-z-]/gi,'_')}
+async function exportSummary(){
+ if(state.me.role!=='manager')return;
+ try{
+  const cases=await currentReportCases();
+  const rows=[['ID','Created','Field username','Subject','Article ID','Status','Assigned agent','Queued at','Assigned at','Resolved at','Field reported fixed at','Queue wait seconds','Resolution seconds','Resolution note'],
+  ...cases.map(c=>[c.id,c.created_at,state.profiles.find(p=>p.id===c.field_id)?.username||c.field_id,c.subject,c.article_id,c.status,name(c.assigned_to),c.queued_at,c.assigned_at,c.resolved_at,c.field_reports_fixed_at,queueMs(c)==null?'':Math.round(queueMs(c)/1000),resolveMs(c)==null?'':Math.round(resolveMs(c)/1000),c.resolution])];
+  downloadCsv('resolve-conversations-'+reportFileSuffix()+'.csv',rows);
+ }catch(err){fail(err)}
+}
+async function exportTranscripts(){
+ if(state.me.role!=='manager')return;
+ try{
+  const cases=await currentReportCases();
+  const messages=[];
+  const ids=cases.map(c=>c.id);
+  // Read only the messages belonging to conversations in this date range.
+  // Multiple pages per batch prevent the default Supabase 1,000-row cap.
+  for(let k=0;k<ids.length;k+=100){
+   const batch=ids.slice(k,k+100);
+   for(let offset=0;;offset+=500){
+    const r=await api().from('messages').select('*').in('case_id',batch).order('id',{ascending:true}).range(offset,offset+499);
+    if(r.error)throw r.error;
+    messages.push(...(r.data||[]));
+    if((r.data||[]).length<500)break;
+   }
+  }
+  const map=new Map(cases.map(c=>[c.id,c]));
+  const rows=[['Case ID','Issue','Case created','Case status','Message ID','Timestamp','Sender','Sender type','Message'],
+  ...messages.map(m=>[m.case_id,map.get(m.case_id)?.subject,map.get(m.case_id)?.created_at,map.get(m.case_id)?.status,m.id,m.created_at,m.author_id?name(m.author_id):'Resolve assistant',m.author_kind,m.body])];
+  downloadCsv('resolve-full-transcripts-'+reportFileSuffix()+'.csv',rows);
+ }catch(err){fail(err)}
+}
 function accounts(){
  if(state.me.role!=='manager')return '';
  const current=state.profiles.filter(p=>p.enabled);
