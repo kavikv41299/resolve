@@ -68,7 +68,13 @@
 .report-dates .field{display:flex;flex-direction:column;min-width:145px}
 .report-explanation{font-size:12px;color:var(--muted,#6b778b);margin-bottom:15px}
 @media(max-width:620px){.report-dates .field{flex:1;min-width:125px}.report-dates input{width:100%;max-width:none}}
-</style></head><body><div id="app"></div><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script><script>
+
+/* Agent availability picker (manager reassignment) */
+.reassign-modal{width:min(540px,100%);max-height:90dvh;overflow-y:auto}
+.reassign-modal select{width:100%}
+.reassign-modal .notice{line-height:1.55}
+@media(max-width:620px){.reassign-modal{padding:18px}}
+</style></head><body><div id="app"></div><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.min.js'"></script><script>
 /* Public project credentials only; the SERVICE_ROLE key must NEVER be placed here. */
 const CONFIG={url:'https://qegoaryhedsttjcnvljz.supabase.co',anon:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFlZ29hcnloZWRzdHRqY252bGp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM3MTU1MzEsImV4cCI6MjEwOTI5MTUzMX0.OQpXIG42O6QgKVC2-Z9-MAoa8hnZlbAexol4LlSrtKw'};
 
@@ -120,7 +126,7 @@ function reportBounds(){
 }
 function reportLabel(){const b=reportBounds();return b.from?`${b.from} to ${b.to}`:'all-dates'}
 
-const api=()=>{if(!state.client)throw Error('Supabase is not configured. Open index.html and set CONFIG.');return state.client};
+const api=()=>{if(!state.client)throw Error(window.supabase?'Supabase connection has not started. Reload the page and try again.':'The Supabase library could not load. Check the internet connection or company network filtering, then reload the page.');return state.client};
 const fail=x=>{state.alert=x.message||String(x);render()};
 const showAlert=()=>state.alert?`<div class="notice error" role="alert">${e(state.alert)}</div>`:'';
 const btn=(text,func,cls='')=>`<button class="btn ${cls}" onclick="${func}">${text}</button>`;
@@ -211,7 +217,77 @@ function tryStep(id,sid,solved){callRpc('try_step',{p_case_id:id,p_step_id:sid,p
 function escalate(id){callRpc('escalate_case',{p_case_id:id})}
 function takeover(id){callRpc('takeover_case',{p_case_id:id})}
 function resolvePrompt(id){const n=prompt('Resolution note (required):');if(n!==null)callRpc('resolve_case',{p_case_id:id,p_resolution:n})}
-function reassignPrompt(id){const agents=state.profiles.filter(p=>p.role==='agent'&&p.enabled);const txt=agents.map(p=>p.username+': '+p.display_name).join('\n');const target=prompt('Enter agent username:\n'+txt);if(!target)return;const p=agents.find(a=>a.username.toLowerCase()===target.toLowerCase().trim());if(!p){alert('Unknown agent');return}callRpc('reassign_case',{p_case_id:id,p_agent_id:p.id})}
+// Manager-only reassignment: retrieve eligible agents from Supabase on demand.
+// The database checks availability and capacity again when saving.
+async function reassignPrompt(id){
+  if(state.me?.role!=='manager')return;
+  const c=state.cases.find(x=>x.id===id);
+  if(!c||c.status==='resolved'){state.alert='This conversation is no longer open.';render();return}
+  document.getElementById('overlay')?.remove();
+  document.body.insertAdjacentHTML('beforeend',`<div class="overlay" id="overlay" role="presentation">
+    <div class="modal reassign-modal" role="dialog" aria-modal="true" aria-labelledby="reassign-title">
+      <h2 id="reassign-title">Reassign conversation</h2>
+      <p class="muted small">${e(c.subject)} · Current agent: ${e(name(c.assigned_to))}</p>
+      <p class="small muted">Only agents marked Available, with space for another conversation, are listed.</p>
+      <div id="reassign-candidates" aria-live="polite">Checking available agents…</div>
+      <div class="actions" style="margin-top:16px">
+        <button type="button" class="btn alt sm" onclick="loadReassignmentAgents('${id}')">↻ Refresh available agents</button>
+        <button type="button" class="btn alt sm" onclick="document.getElementById('overlay')?.remove()">Cancel</button>
+      </div>
+    </div>
+  </div>`);
+  await loadReassignmentAgents(id);
+}
+
+async function loadReassignmentAgents(id){
+  const target=document.getElementById('reassign-candidates');
+  if(!target)return;
+  target.textContent='Checking available agents…';
+  try{
+    const {data,error}=await api().rpc('eligible_reassignment_agents');
+    if(error)throw error;
+    if(!document.getElementById('reassign-candidates'))return;
+    const c=state.cases.find(x=>x.id===id);
+    const agents=(data||[]).filter(a=>a.agent_id!==c?.assigned_to);
+    if(!agents.length){
+      target.innerHTML='<div class="notice">No other available agents have spare chat capacity. You can retry when an agent becomes available.</div>';
+      return;
+    }
+    target.innerHTML=`<form onsubmit="submitReassignment(event,'${id}')">
+      <label for="target-agent">Available Technical Support agents</label>
+      <select id="target-agent" required>
+        <option value="">Select an agent…</option>
+        ${agents.map(a=>`<option value="${e(a.agent_id)}">${e(a.display_name)} (${e(a.username)}) · ${Number(a.active_chats)}/${Number(a.max_chats)} chats</option>`).join('')}
+      </select>
+      <p id="reassign-error" class="small" role="alert" style="color:#b52b45"></p>
+      <button type="submit" class="btn" style="margin-top:12px">Confirm reassignment</button>
+    </form>`;
+  }catch(err){
+    target.textContent='Could not load available agents: '+(err?.message||String(err));
+  }
+}
+
+async function submitReassignment(ev,id){
+  ev.preventDefault();
+  if(state.me?.role!=='manager')return;
+  const select=document.getElementById('target-agent');
+  const agentId=select?.value;
+  const message=document.getElementById('reassign-error');
+  if(!agentId){if(message)message.textContent='Select an agent first.';return}
+  const button=ev.target.querySelector('button[type="submit"]');
+  if(button)button.disabled=true;
+  try{
+    const {error}=await api().rpc('reassign_case',{p_case_id:id,p_agent_id:agentId});
+    if(error)throw error;
+    document.getElementById('overlay')?.remove();
+    state.alert='';
+    await refresh();
+  }catch(err){
+    if(message)message.textContent=err?.message||String(err);
+    if(button)button.disabled=false;
+  }
+}
+
 
 function monitorPage(){if(state.me.role==='field')return '';const active=state.cases.filter(c=>c.status==='ai');const queues=state.cases.filter(c=>c.status==='queued');return `<div class="pagehead"><div><h2>AI conversation monitoring</h2><p class="muted">See every active troubleshooting request, attempted solutions and escalation status.</p></div>${btn('Refresh','refresh()','alt sm')}</div><div class="cards"><div class="card"><span class="muted small">Currently using Resolve</span><div class="metric">${active.length}</div></div><div class="card"><span class="muted small">Awaiting human</span><div class="metric">${queues.length}</div></div><div class="card"><span class="muted small">Agent-connected</span><div class="metric">${state.cases.filter(c=>c.status==='assigned').length}</div></div></div><div class="card"><h3>Live AI sessions</h3>${active.map(c=>{const steps=state.steps.filter(x=>x.article_id===c.article_id);return `<button class="caseitem" style="width:100%;text-align:left" onclick="state.tab='inbox';state.selected='${c.id}';loadSelected()"><b>${e(c.subject)}</b><div class="small muted">${e(name(c.field_id))} · ${fmt(c.created_at)} · ${steps.length} configured steps · View conversation →</div></button>`}).join('')||'<p class="muted">There are no active AI sessions.</p>'}</div><div class="card" style="margin-top:12px"><h3>Waiting for a human agent</h3>${queues.map(c=>`<button class="caseitem" style="width:100%;text-align:left" onclick="state.tab='inbox';state.selected='${c.id}';loadSelected()"><b>${e(c.subject)}</b> · ${duration(queueMs(c))}</button>`).join('')||'<p class="muted">The queue is empty.</p>'}</div>`}
 function knowledgePage(){if(state.me.role!=='manager')return '<div class="notice">Manager access required.</div>';return `<div class="pagehead"><div><h2>Errors & solutions</h2><p class="muted">Manager-controlled troubleshooting knowledge base. Deleted guides are removed from this list; completed conversation history is retained.</p></div>${btn('+ Add troubleshooting guide','editKnowledge()','sm')}</div><div class="kb-grid">${state.articles.filter(a=>!a.deleted_at).map(a=>{const steps=state.steps.filter(x=>x.article_id===a.id);return `<div class="card kb-entry"><div class="actions"><span class="chip ${a.active?'assigned':'resolved'}">${a.active?'Active':'Disabled'}</span></div><h3>${e(a.title)}</h3><div class="small muted">Keywords: ${e(a.keywords||'—')}</div><ol>${steps.map(x=>`<li>${e(x.instructions)}</li>`).join('')}</ol><div class="actions">${btn('Edit steps',`editKnowledge('${a.id}')`,'alt sm')}${btn(a.active?'Disable':'Enable',`toggleKnowledge('${a.id}',${!a.active})`,'soft sm')}${btn('Delete',`deleteKnowledge('${a.id}')`,'danger sm')}</div></div>`}).join('')}</div><p class="highlightnote">Updates are saved to Supabase for all users. You must run the accompanying SQL upgrade first to enable secure manager-only editing.</p>`}
@@ -377,5 +453,17 @@ async function deleteAccount(id){
  try{await invokeAccounts({action:'delete',user_id:id});state.alert='Access removed for '+p.username;await refresh()}catch(err){fail(err)}
 }
 
-(async()=>{try{if(CONFIG.url.startsWith('https://')&&!CONFIG.anon.startsWith('REPLACE_')&&window.supabase){state.client=window.supabase.createClient(CONFIG.url,CONFIG.anon,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}});const {data}=await state.client.auth.getSession();if(data.session){state.user=data.session.user;await initSession();return}}}catch(err){state.alert=err.message}home()})();
+// Show the landing page immediately, even if a network request is slow or fails.
+home();
+(async()=>{try{
+  if(!window.supabase){state.alert='Supabase could not load. Check your connection and refresh this page.';return;}
+  if(!CONFIG.url.startsWith('https://')||CONFIG.anon.startsWith('REPLACE_')){
+    state.alert='Supabase project settings are incomplete.';return;
+  }
+  state.client=window.supabase.createClient(CONFIG.url,CONFIG.anon,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}});
+  const {data,error}=await state.client.auth.getSession();
+  if(error)throw error;
+  if(data.session){state.user=data.session.user;await initSession();return;}
+ }catch(err){state.alert=err.message||String(err);state.user=null;state.me=null;home();}
+})();
 </script></body></html>
