@@ -62,6 +62,17 @@
 /* Field request cooldown + agent-verified resolution + reporting date filters */
 .cooldown-notice{border:1px solid #b8cefa;background:#edf4ff;color:#255083;border-radius:12px;padding:13px 15px;margin:14px 0;font-size:13px}
 .cooldown-notice.ready{border-color:#b8e1c9;background:#ecfaf1;color:#216748}
+/* Live conversations: date range controls share the reporting layout. */
+.inbox-filterbar{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin:0 0 15px}
+.inbox-filterbar .field{display:flex;flex-direction:column;min-width:135px;flex:1;max-width:195px}
+.inbox-filterbar .field label{margin:0 0 5px}
+.inbox-filterbar select{max-width:195px}
+.inbox-filterbar input{width:100%}
+.inbox-filterbar .btn{white-space:nowrap}
+.inbox-filtermeta{margin:-1px 0 14px;color:#65758f;font-size:12px}
+.inbox-filtermeta strong{font-weight:700}
+.inbox-filtermeta .date-error{color:#af3040;font-weight:650}
+@media(max-width:700px){.inbox-filterbar .field{min-width:calc(50% - 12px);max-width:none}.inbox-filterbar select{max-width:none}.inbox-filterbar .btn{flex:1}}
 .report-dates{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:12px 0 17px}
 .report-dates label{margin:0 0 5px}
 .report-dates input{max-width:180px}
@@ -133,7 +144,7 @@ function themeButton(){return `<button type="button" class="theme-toggle" data-t
 function logoMark(){return `<img class="verisure-logo" src="https://asset.brandfetch.io/id98I3Kz6C/id-kzK5uj2.png?updated=1716597061125" alt="Verisure" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'brand-fallback',textContent:'verisure'}))">`}
 setTheme(theme());
 setInterval(updateRequestCountdown,1000);
-const el=document.getElementById('app');const state={overviewMode:'live',overviewFrom:'',overviewTo:'',overviewDraftFrom:'',overviewDraftTo:'',overviewCases:null,overviewLoading:false,overviewUpdatedAt:null,overviewError:'',overviewFetchSerial:0,reportRange:'all',reportStart:'',reportEnd:'',reportCases:null,reportLoading:false,client:null,user:null,me:null,portal:null,tab:'overview',cases:[],profiles:[],articles:[],steps:[],messages:[],attempts:[],selected:null,filter:'all',status:'',alert:'',channels:[],loginType:'field',unreadCounts:{},unreadReady:false,unreadError:'',soundEnabled:true,audioContext:null,lastSoundAt:0,drafts:{},onlineAgents:[],onlineAgentsReady:false,onlineAgentsError:'',presenceTouchInFlight:false,signingOut:false};
+const el=document.getElementById('app');const state={inboxMode:'all',inboxFrom:'',inboxTo:'',inboxDraftFrom:'',inboxDraftTo:'',inboxCases:null,inboxLoading:false,inboxError:'',inboxUpdatedAt:null,inboxFetchSerial:0,overviewMode:'live',overviewFrom:'',overviewTo:'',overviewDraftFrom:'',overviewDraftTo:'',overviewCases:null,overviewLoading:false,overviewUpdatedAt:null,overviewError:'',overviewFetchSerial:0,reportRange:'all',reportStart:'',reportEnd:'',reportCases:null,reportLoading:false,client:null,user:null,me:null,portal:null,tab:'overview',cases:[],profiles:[],articles:[],steps:[],messages:[],attempts:[],selected:null,filter:'all',status:'',alert:'',channels:[],loginType:'field',unreadCounts:{},unreadReady:false,unreadError:'',soundEnabled:true,audioContext:null,lastSoundAt:0,drafts:{},onlineAgents:[],onlineAgentsReady:false,onlineAgentsError:'',presenceTouchInFlight:false,signingOut:false};
 const e=s=>String(s??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const fmt=d=>d?new Date(d).toLocaleString('en-GB',{dateStyle:'short',timeStyle:'short'}):'—';
 const duration=ms=>ms==null?'—':ms<0?'—':Math.floor(ms/3600000)+'h '+String(Math.floor(ms%3600000/60000)).padStart(2,'0')+'m';
@@ -192,6 +203,126 @@ function ukMidnightUTC(dateISO,addDays=0){
   utc=localUTC-(londonAsUTC-utc);
  }
  return new Date(utc).toISOString();
+}
+
+// Live Conversations date filter uses UK dates and fetches matching rows from
+// Supabase, rather than limiting historical searches to the latest 1,000.
+function inboxBounds(){
+ const today=ukDateISO();
+ let from=state.inboxFrom, to=state.inboxTo;
+ if(state.inboxMode==='today'){from=today;to=today;}
+ if(state.inboxMode==='7d'||state.inboxMode==='30d'){
+  const n=state.inboxMode==='7d'?6:29;
+  const [y,m,d]=today.split('-').map(Number);
+  from=ukDateISO(new Date(Date.UTC(y,m-1,d-n,12)));
+  to=today;
+ }
+ if(state.inboxMode==='all')return null;
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(from||'')||!/^\d{4}-\d{2}-\d{2}$/.test(to||'')||from>to){
+  throw Error('Choose a valid From and To date, with From not later than To.');
+ }
+ return {from,to,start:ukMidnightUTC(from),end:ukMidnightUTC(to,1)};
+}
+function liveConversationCases(){
+ if(state.me?.role==='field'||state.tab!=='inbox'||state.inboxMode==='all')return state.cases;
+ return state.inboxCases||[];
+}
+function findCaseById(id){
+ return state.cases.find(c=>c.id===id)||(state.inboxCases||[]).find(c=>c.id===id);
+}
+async function loadInboxCases(){
+ const request=++state.inboxFetchSerial;
+ if(state.inboxMode==='all'){
+  state.inboxCases=null;state.inboxError='';state.inboxLoading=false;
+  return;
+ }
+ state.inboxLoading=true;
+ try{
+  const {start,end}=inboxBounds();
+  const rows=[];
+  for(let offset=0;;offset+=500){
+   const result=await api().from('cases').select('*')
+    .gte('created_at',start).lt('created_at',end)
+    .order('created_at',{ascending:false}).range(offset,offset+499);
+   if(result.error)throw result.error;
+   if(request!==state.inboxFetchSerial)return;
+   const batch=result.data||[];
+   rows.push(...batch);
+   if(batch.length<500)break;
+  }
+  if(request!==state.inboxFetchSerial)return;
+  state.inboxCases=rows;
+  state.inboxUpdatedAt=Date.now();
+  state.inboxError='';
+ }catch(err){
+  if(request!==state.inboxFetchSerial)return;
+  state.inboxError=err.message||String(err);
+  state.inboxCases=[];
+ }finally{
+  if(request===state.inboxFetchSerial)state.inboxLoading=false;
+ }
+}
+async function chooseInboxPreset(mode){
+ if(!['all','today','7d','30d','custom'].includes(mode))return;
+ if(mode==='custom'){
+  const bounds=state.inboxMode==='all'?null:inboxBounds();
+  state.inboxDraftFrom=state.inboxDraftFrom||bounds?.from||ukDateISO();
+  state.inboxDraftTo=state.inboxDraftTo||bounds?.to||ukDateISO();
+  state.inboxMode='custom';
+  state.inboxFrom=state.inboxDraftFrom;state.inboxTo=state.inboxDraftTo;
+  // Do not query until Apply Dates is pressed.
+  state.inboxCases=[];state.selected=null;
+  render();return;
+ }
+ state.inboxMode=mode;state.inboxError='';state.inboxCases=null;
+ state.inboxFrom='';state.inboxTo='';state.inboxDraftFrom='';state.inboxDraftTo='';
+ state.selected=null;state.messages=[];state.attempts=[];
+ if(mode==='all'){render();return;}
+ state.inboxLoading=true;render();await refresh();
+}
+async function applyInboxDates(ev){
+ ev.preventDefault();
+ const from=document.getElementById('inboxFrom')?.value||'';
+ const to=document.getElementById('inboxTo')?.value||'';
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to){
+  state.inboxError='Please choose valid From and To dates. From must not be later than To.';
+  render();return;
+ }
+ state.inboxMode='custom';state.inboxFrom=from;state.inboxTo=to;
+ state.inboxDraftFrom=from;state.inboxDraftTo=to;
+ state.inboxCases=null;state.inboxError='';state.inboxLoading=true;
+ state.selected=null;state.messages=[];state.attempts=[];
+ render();await refresh();
+}
+async function refreshInbox(){
+ state.inboxError='';
+ if(state.inboxMode==='all'){await refresh();return;}
+ state.inboxLoading=true;render();await refresh();
+}
+function inboxFilterHTML(){
+ if(state.me?.role==='field')return '';
+ const bounds=state.inboxMode==='all'?null:inboxBounds();
+ const from=state.inboxMode==='custom'?(state.inboxDraftFrom||state.inboxFrom||ukDateISO()):(bounds?.from||ukDateISO());
+ const to=state.inboxMode==='custom'?(state.inboxDraftTo||state.inboxTo||ukDateISO()):(bounds?.to||ukDateISO());
+ const options=[['all','All (latest 1,000)'],['today','Today'],['7d','Last 7 days'],['30d','Last 30 days'],['custom','Custom range']];
+ const summary=state.inboxMode==='all'?'Showing the latest 1,000 visible conversations':
+  `Created ${e(bounds?.from||from)} to ${e(bounds?.to||to)} (UK dates, inclusive)`;
+ return `<form class="inbox-filterbar card" style="padding:13px 16px" onsubmit="applyInboxDates(event)">
+   <div class="field"><label for="inboxPreset">Date filter</label>
+    <select id="inboxPreset" onchange="chooseInboxPreset(this.value)">
+     ${options.map(([v,t])=>`<option value="${v}" ${state.inboxMode===v?'selected':''}>${t}</option>`).join('')}
+    </select>
+   </div>
+   <div class="field"><label for="inboxFrom">From</label><input id="inboxFrom" type="date" value="${e(from)}" oninput="state.inboxDraftFrom=this.value" aria-label="From date"></div>
+   <div class="field"><label for="inboxTo">To</label><input id="inboxTo" type="date" value="${e(to)}" oninput="state.inboxDraftTo=this.value" aria-label="To date"></div>
+   <button class="btn" type="submit">Apply dates</button>
+   <button class="btn alt" type="button" onclick="chooseInboxPreset('today')">Today</button>
+   <button class="btn alt" type="button" onclick="refreshInbox()">↻ Refresh</button>
+  </form>
+  <div class="inbox-filtermeta" role="status">
+   ${state.inboxLoading?'Loading conversations from Supabase…':`${summary} · ${liveConversationCases().length} results`}
+   ${state.inboxError?`<span class="date-error"> · ${e(state.inboxError)}</span>`:''}
+  </div>`;
 }
 function overviewBounds(){
  const from=state.overviewMode==='live'?ukDateISO():state.overviewFrom;
@@ -337,7 +468,7 @@ async function loadUnreadCounts(){
  }
 }
 function conversationVisibleToAgent(caseId){
- const c=state.cases.find(x=>x.id===caseId);
+ const c=findCaseById(caseId);
  return !!(c&&state.me?.role==='agent'&&c.assigned_to===state.me.id&&c.status==='assigned');
 }
 async function markConversationRead(caseId){
@@ -434,10 +565,14 @@ async function refresh(draw=true){try{if(!state.me||state.me.must_change_passwor
    state.onlineAgentsReady=true;state.onlineAgentsError='';
   }
  }
- if(state.me?.role==='agent'){const own=state.profiles.find(p=>p.id===state.me.id);if(own)state.me.agent_state=own.agent_state;}state.articles=as.data||[];state.steps=ss.data||[];if(state.selected&&!state.cases.some(x=>x.id===state.selected))state.selected=null;if(!state.selected&&state.cases.length)state.selected=state.cases[0].id;await loadSelected(false);if(state.tab==='overview'&&(state.overviewMode==='live'||state.overviewCases===null))await loadOverviewCases();if(state.me?.role==='agent'){await loadUnreadCounts();if(isChatActuallyVisible()&&state.selected&&unreadFor(state.selected)>0)await markConversationRead(state.selected);}if(draw){const dateInputFocused=state.tab==='overview'&&document.activeElement?.matches?.('#overviewFrom,#overviewTo');if(dateInputFocused)return;render();if(hadFocus){const restored=document.getElementById('chattext');if(restored){restored.focus();try{restored.setSelectionRange(selection[0],selection[1])}catch{}}}}}catch(err){state.alert=err.message;render()}}
+ if(state.me?.role==='agent'){const own=state.profiles.find(p=>p.id===state.me.id);if(own)state.me.agent_state=own.agent_state;}state.articles=as.data||[];state.steps=ss.data||[];if(state.tab==='inbox'&&state.me?.role!=='field'&&state.inboxMode!=='all')await loadInboxCases();
+ const selectable=state.tab==='inbox'&&state.me?.role!=='field'?liveConversationCases():state.cases;
+ if(state.selected&&!selectable.some(x=>x.id===state.selected))state.selected=null;
+ if(!state.selected&&selectable.length)state.selected=selectable[0].id;
+ await loadSelected(false);if(state.tab==='overview'&&(state.overviewMode==='live'||state.overviewCases===null))await loadOverviewCases();if(state.me?.role==='agent'){await loadUnreadCounts();if(isChatActuallyVisible()&&state.selected&&unreadFor(state.selected)>0)await markConversationRead(state.selected);}if(draw){const dateInputFocused=(state.tab==='overview'&&document.activeElement?.matches?.('#overviewFrom,#overviewTo'))||(state.tab==='inbox'&&document.activeElement?.matches?.('#inboxFrom,#inboxTo'));if(dateInputFocused)return;render();if(hadFocus){const restored=document.getElementById('chattext');if(restored){restored.focus();try{restored.setSelectionRange(selection[0],selection[1])}catch{}}}}}catch(err){state.alert=err.message;render()}}
 async function loadSelected(draw=true){if(!state.selected){state.messages=[];state.attempts=[];return}const [m,a]=await Promise.all([api().from('messages').select('*').eq('case_id',state.selected).order('created_at'),api().from('step_attempts').select('*').eq('case_id',state.selected)]);if(m.error)throw m.error;if(a.error)throw a.error;state.messages=m.data||[];state.attempts=a.data||[];if(draw)render()}
 function subscribe(){state.channels.forEach(ch=>api().removeChannel(ch));state.channels=[];const ch=api().channel('resolve-refresh-'+state.user.id).on('postgres_changes',{event:'*',schema:'public',table:'cases'},scheduleLiveRefresh).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'},scheduleLiveRefresh).on('postgres_changes',{event:'*',schema:'public',table:'profiles'},scheduleLiveRefresh).subscribe();state.channels=[ch]}
-setInterval(()=>{if(state.me&&document.visibilityState==='visible'&&(state.me.role==='agent'||(state.me.role==='manager'&&state.tab==='team')||(state.tab==='overview'&&state.overviewMode==='live')))scheduleLiveRefresh()},15000);
+setInterval(()=>{if(state.me&&document.visibilityState==='visible'&&(state.me.role==='agent'||(state.me.role==='manager'&&state.tab==='team')||(state.tab==='overview'&&state.overviewMode==='live')||(state.me?.role==='manager'&&state.tab==='inbox')))scheduleLiveRefresh()},15000);
 async function logout(){
  state.signingOut=true;
  try{
@@ -458,6 +593,7 @@ async function openTab(id){
  state.tab=id;state.filter='all';
  if(id==='reports'&&state.me?.role==='manager')await loadReportCases();
  else if(id==='overview'&&(state.overviewMode==='live'||state.overviewCases===null))await refresh();
+ else if(id==='inbox'&&state.inboxMode!=='all')await refresh();
  else render();
 }
 function render(){if(!state.me){if(state.loginType)login(state.loginType);else home();return}if(state.me.must_change_password){passwordModal();return}if(state.portal==='field'&&!['new','conversations'].includes(state.tab))state.tab='conversations';if(state.portal==='staff'&&!['overview','inbox','monitor','team','knowledge','reports','accounts'].includes(state.tab))state.tab='overview';let content='';if(state.tab==='new')content=newRequest();else if(state.tab==='conversations'||state.tab==='inbox')content=inbox();else if(state.tab==='monitor')content=monitorPage();else if(state.tab==='knowledge')content=knowledgePage();else if(state.tab==='overview')content=overview();else if(state.tab==='team')content=team();else if(state.tab==='reports')content=reports();else if(state.tab==='accounts')content=accounts();el.innerHTML=`<div class="shell">${header()}<div class="layout">${nav()}<main class="main">${showAlert()}${content}<div class="footer">Resolve · Protected by Supabase authentication and database policies · Times shown in your browser's timezone</div></main></div></div>`;const msgs=document.getElementById('messages');if(msgs)msgs.scrollTop=msgs.scrollHeight}
@@ -507,7 +643,7 @@ async function createCase(ev){
  }catch(err){if(submit)submit.disabled=false;fail(err)}
 }
 function caseList(){
- let cases=state.cases;
+ let cases=state.me?.role==='field'?state.cases:liveConversationCases();
  if(state.filter!=='all')cases=cases.filter(c=>c.status===state.filter);
  const help=state.me?.role==='agent'?`<p class="unread-help" aria-live="polite">${state.unreadError?e(state.unreadError):`${unreadConversations()} conversation${unreadConversations()===1?'':'s'} with new Field messages. Blue highlights disappear when you open the conversation.`}</p>`:'';
  return `<div class="card"><div class="pagehead"><b>Conversations (${cases.length})</b><select style="max-width:130px" onchange="state.filter=this.value;render()"><option value="all" ${state.filter==='all'?'selected':''}>All</option>${['ai','queued','assigned','resolved'].map(s=>`<option ${s===state.filter?'selected':''} value="${s}">${s}</option>`).join('')}</select></div>${help}<div class="list">${cases.length?cases.map(c=>{
@@ -517,8 +653,8 @@ function caseList(){
 }
 async function selectCase(id){state.selected=id;await loadSelected(false);if(state.me?.role==='agent')await markConversationRead(id);render()}
 function currentStep(c){if(!c||c.status!=='ai')return null;const steps=state.steps.filter(s=>s.article_id===c.article_id);return steps.find(s=>!state.attempts.some(a=>a.step_id===s.id))||null}
-function chatPanel(){const c=state.cases.find(x=>x.id===state.selected);if(!c)return `<div class="card"><p class="muted">Choose a conversation to view the full history.</p></div>`;const isField=state.me.role==='field';const canReply=c.status==='assigned'&&(isField||state.me.role==='manager'||c.assigned_to===state.me.id);const step=currentStep(c);const steps=state.steps.filter(s=>s.article_id===c.article_id),done=state.attempts.length;const canTake=!isField&&c.status!=='resolved'&&c.assigned_to!==state.me.id&&(state.me.role==='manager'||state.me.can_takeover)&&c.status!=='assigned';const canResolve=state.me.role==='agent'&&c.status==='assigned'&&c.assigned_to===state.me.id;const canReturn=!isField&&c.status==='assigned'&&(state.me.role==='manager'||c.assigned_to===state.me.id)&&c.article_id&&step;return `<div class="card chat"><div class="chat-head"><div><b>${e(c.subject)}</b><div class="small muted">${e(name(c.field_id))} · ${e(name(c.assigned_to))} · <span class="chip ${c.status}">${c.status}</span></div></div><div class="actions">${canTake?btn('Take over',`takeover('${c.id}')`,'sm'):''}${canReturn?btn('Return to assistant',`returnToAI('${c.id}')`,'alt sm'):''}${!isField&&state.me.role==='manager'&&c.status!=='resolved'?btn('Reassign',`reassignPrompt('${c.id}')`,'alt sm'):''}${canResolve?btn('Resolve',`resolvePrompt('${c.id}')`,'soft sm'):''}</div></div><div class="messages" id="messages">${state.messages.map(m=>`<div class="bubble ${m.author_id===state.me.id?'own':''} ${m.author_kind==='system'?'system':''}"><div>${e(m.body)}</div><small>${m.author_kind==='system'?'Resolve assistant / system':e(name(m.author_id))} · ${fmt(m.created_at)}</small></div>`).join('')}</div>${c.status==='ai'&&step?`<div class="ai-banner"><strong>◈ Resolve guided assistant · Step ${done+1} of ${steps.length}</strong><div class="step-progress"><span style="width:${Math.round(done/Math.max(steps.length,1)*100)}%"></span></div><p>${e(step.instructions)}</p>${isField?`<div class="actions" style="margin-top:12px">${btn('✓ Issue appears fixed — notify TS',`tryStep('${c.id}','${step.id}',true)`,'sm')}${btn('Still not working →',`tryStep('${c.id}','${step.id}',false)`,'alt sm')}</div>`:'<p class="small muted">Read-only monitoring. You can take over if authorised.</p>'}</div>`:''}${isField&&c.status==='ai'?`<div class="notice small" style="margin:12px 0">${step?'Complete each troubleshooting step. If the issue is still unresolved after the final step, Resolve will automatically connect you to Technical Support.':'Checking the available troubleshooting steps. If no approved steps are available, the request will be routed to Technical Support.'} If a solution fixes the issue, Technical Support will verify it before closure.</div>`:''}${c.status==='queued'?`<div class="notice small">${c.field_reports_fixed_at?'Field has reported a fix. Waiting for a Technical Support agent to verify and close the request.':'Waiting for the next eligible agent.'} · Current queue wait: ${duration(queueMs(c))}</div>`:''}${canReply?`<form class="compose" onsubmit="sendMessage(event)"><input id="chattext" placeholder="Type a message…" maxlength="10000" required aria-label="Message" value="${e(state.drafts[c.id]||'')}" oninput="rememberDraft(this.value)"><button class="btn" type="submit">Send</button></form>`:`<p class="muted small">${c.status==='resolved'?'This conversation is resolved.':c.status==='ai'?'Resolve is guiding the field colleague.':'Waiting or monitoring only.'}</p>`}</div>`}
-function inbox(){return `<div class="pagehead"><h2>${state.me.role==='field'?'My support requests':'Live support conversations'}</h2>${state.me.role==='field'?btn('New request',"state.tab='new';render()",'sm'):btn('Refresh',"refresh()",'alt sm')}</div><div class="grid2">${caseList()}${chatPanel()}</div>`}
+function chatPanel(){const c=findCaseById(state.selected);if(!c)return `<div class="card"><p class="muted">Choose a conversation to view the full history.</p></div>`;const isField=state.me.role==='field';const canReply=c.status==='assigned'&&(isField||state.me.role==='manager'||c.assigned_to===state.me.id);const step=currentStep(c);const steps=state.steps.filter(s=>s.article_id===c.article_id),done=state.attempts.length;const canTake=!isField&&c.status!=='resolved'&&c.assigned_to!==state.me.id&&(state.me.role==='manager'||state.me.can_takeover)&&c.status!=='assigned';const canResolve=state.me.role==='agent'&&c.status==='assigned'&&c.assigned_to===state.me.id;const canReturn=!isField&&c.status==='assigned'&&(state.me.role==='manager'||c.assigned_to===state.me.id)&&c.article_id&&step;return `<div class="card chat"><div class="chat-head"><div><b>${e(c.subject)}</b><div class="small muted">${e(name(c.field_id))} · ${e(name(c.assigned_to))} · <span class="chip ${c.status}">${c.status}</span></div></div><div class="actions">${canTake?btn('Take over',`takeover('${c.id}')`,'sm'):''}${canReturn?btn('Return to assistant',`returnToAI('${c.id}')`,'alt sm'):''}${!isField&&state.me.role==='manager'&&c.status!=='resolved'?btn('Reassign',`reassignPrompt('${c.id}')`,'alt sm'):''}${canResolve?btn('Resolve',`resolvePrompt('${c.id}')`,'soft sm'):''}</div></div><div class="messages" id="messages">${state.messages.map(m=>`<div class="bubble ${m.author_id===state.me.id?'own':''} ${m.author_kind==='system'?'system':''}"><div>${e(m.body)}</div><small>${m.author_kind==='system'?'Resolve assistant / system':e(name(m.author_id))} · ${fmt(m.created_at)}</small></div>`).join('')}</div>${c.status==='ai'&&step?`<div class="ai-banner"><strong>◈ Resolve guided assistant · Step ${done+1} of ${steps.length}</strong><div class="step-progress"><span style="width:${Math.round(done/Math.max(steps.length,1)*100)}%"></span></div><p>${e(step.instructions)}</p>${isField?`<div class="actions" style="margin-top:12px">${btn('✓ Issue appears fixed — notify TS',`tryStep('${c.id}','${step.id}',true)`,'sm')}${btn('Still not working →',`tryStep('${c.id}','${step.id}',false)`,'alt sm')}</div>`:'<p class="small muted">Read-only monitoring. You can take over if authorised.</p>'}</div>`:''}${isField&&c.status==='ai'?`<div class="notice small" style="margin:12px 0">${step?'Complete each troubleshooting step. If the issue is still unresolved after the final step, Resolve will automatically connect you to Technical Support.':'Checking the available troubleshooting steps. If no approved steps are available, the request will be routed to Technical Support.'} If a solution fixes the issue, Technical Support will verify it before closure.</div>`:''}${c.status==='queued'?`<div class="notice small">${c.field_reports_fixed_at?'Field has reported a fix. Waiting for a Technical Support agent to verify and close the request.':'Waiting for the next eligible agent.'} · Current queue wait: ${duration(queueMs(c))}</div>`:''}${canReply?`<form class="compose" onsubmit="sendMessage(event)"><input id="chattext" placeholder="Type a message…" maxlength="10000" required aria-label="Message" value="${e(state.drafts[c.id]||'')}" oninput="rememberDraft(this.value)"><button class="btn" type="submit">Send</button></form>`:`<p class="muted small">${c.status==='resolved'?'This conversation is resolved.':c.status==='ai'?'Resolve is guiding the field colleague.':'Waiting or monitoring only.'}</p>`}</div>`}
+function inbox(){return `<div class="pagehead"><h2>${state.me.role==='field'?'My support requests':'Live support conversations'}</h2>${state.me.role==='field'?btn('New request',"state.tab='new';render()",'sm'):''}</div>${inboxFilterHTML()}<div class="grid2">${caseList()}${chatPanel()}</div>`}
 async function callRpc(fn,args){try{const r=await api().rpc(fn,args);if(r.error)throw r.error;state.alert='';await refresh()}catch(err){fail(err)}}
 async function sendMessage(ev){ev.preventDefault();const id=state.selected,v=document.getElementById('chattext')?.value.trim();if(!v)return;try{const r=await api().rpc('post_message',{p_case_id:id,p_body:v});if(r.error)throw r.error;delete state.drafts[id];state.alert='';await refresh()}catch(err){fail(err)}}
 function tryStep(id,sid,solved){callRpc('try_step',{p_case_id:id,p_step_id:sid,p_solved:solved})}
@@ -529,7 +665,7 @@ function resolvePrompt(id){const n=prompt('Resolution note (required):');if(n!==
 // The database checks availability and capacity again when saving.
 async function reassignPrompt(id){
   if(state.me?.role!=='manager')return;
-  const c=state.cases.find(x=>x.id===id);
+  const c=findCaseById(id);
   if(!c||c.status==='resolved'){state.alert='This conversation is no longer open.';render();return}
   document.getElementById('overlay')?.remove();
   document.body.insertAdjacentHTML('beforeend',`<div class="overlay" id="overlay" role="presentation">
@@ -555,7 +691,7 @@ async function loadReassignmentAgents(id){
     const {data,error}=await api().rpc('eligible_reassignment_agents');
     if(error)throw error;
     if(!document.getElementById('reassign-candidates'))return;
-    const c=state.cases.find(x=>x.id===id);
+    const c=findCaseById(id);
     const agents=(data||[]).filter(a=>a.agent_id!==c?.assigned_to);
     if(!agents.length){
       target.innerHTML='<div class="notice">No other available agents have spare chat capacity. You can retry when an agent becomes available.</div>';
