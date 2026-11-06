@@ -89,6 +89,29 @@
 [data-theme="dark"] .caseitem.has-unread:hover{background:#284972!important}
 [data-theme="dark"] .unread-help{color:#b8c8df}
 @media(max-width:620px){.notification-toggle{padding:7px 8px;font-size:11px}.unread-label{font-size:10px}}
+
+/* Resolve overview: UK-local Live Today and historical date filters */
+.overview-filter{padding:16px 18px;margin-bottom:17px}
+.overview-filter-row{display:flex;align-items:end;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.overview-filter-heading{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:6px}
+.overview-filter-heading strong{font-size:15px}
+.overview-filter .overview-filter-desc{margin:0;color:var(--muted,#6b778b);font-size:12px}
+.overview-controls{display:flex;align-items:end;gap:9px;flex-wrap:wrap}
+.overview-controls label{display:block;margin:0 0 5px;font-size:11px;color:var(--muted,#6b778b)}
+.overview-controls input[type="date"]{width:148px;min-width:125px;padding:8px 10px;min-height:39px}
+.overview-controls .btn{min-height:39px;white-space:nowrap}
+.overview-live-btn{border-color:#b1dfcb!important;color:#136344!important;background:#eaf8f0!important}
+.overview-live-btn.active{background:#137954!important;border-color:#137954!important;color:white!important}
+.overview-live-dot{display:inline-block;width:8px;height:8px;background:currentColor;border-radius:99px;margin-right:5px}
+.overview-period{font-size:12px;color:var(--muted,#6b778b);padding-top:11px;display:flex;gap:12px;flex-wrap:wrap;justify-content:space-between}
+.overview-count-note{font-size:12px;color:var(--muted,#6b778b);margin:-4px 0 14px}
+.overview-mode-label{background:#e8f6ed;color:#14633e;padding:4px 9px;border-radius:999px;font-size:11px;font-weight:700}
+.overview-mode-label.history{background:#eaf0ff;color:#315bb7}
+[data-theme="dark"] .overview-live-btn{color:#a4e9c6!important;background:#163b32!important;border-color:#3a7e66!important}
+[data-theme="dark"] .overview-live-btn.active{background:#218564!important;color:white!important}
+[data-theme="dark"] .overview-mode-label{background:#20493b;color:#c9f4dc}
+[data-theme="dark"] .overview-mode-label.history{background:#243e68;color:#c9daff}
+@media(max-width:750px){.overview-filter-row{align-items:stretch}.overview-controls{width:100%}.overview-controls .overview-date-field{flex:1;min-width:125px}.overview-controls input[type="date"]{width:100%}.overview-controls .btn{flex:1}}
 </style></head><body><div id="app"></div><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.min.js'"></script><script>
 /* Public project credentials only; the SERVICE_ROLE key must NEVER be placed here. */
 const CONFIG={url:'https://qegoaryhedsttjcnvljz.supabase.co',anon:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFlZ29hcnloZWRzdHRqY252bGp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM3MTU1MzEsImV4cCI6MjEwOTI5MTUzMX0.OQpXIG42O6QgKVC2-Z9-MAoa8hnZlbAexol4LlSrtKw'};
@@ -101,7 +124,7 @@ function themeButton(){return `<button type="button" class="theme-toggle" data-t
 function logoMark(){return `<img class="verisure-logo" src="https://asset.brandfetch.io/id98I3Kz6C/id-kzK5uj2.png?updated=1716597061125" alt="Verisure" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'brand-fallback',textContent:'verisure'}))">`}
 setTheme(theme());
 setInterval(updateRequestCountdown,1000);
-const el=document.getElementById('app');const state={reportRange:'all',reportStart:'',reportEnd:'',reportCases:null,reportLoading:false,client:null,user:null,me:null,portal:null,tab:'overview',cases:[],profiles:[],articles:[],steps:[],messages:[],attempts:[],selected:null,filter:'all',status:'',alert:'',channels:[],loginType:'field',unreadCounts:{},unreadReady:false,unreadError:'',soundEnabled:true,audioContext:null,lastSoundAt:0,drafts:{}};
+const el=document.getElementById('app');const state={overviewMode:'live',overviewFrom:'',overviewTo:'',overviewDraftFrom:'',overviewDraftTo:'',overviewCases:null,overviewLoading:false,overviewUpdatedAt:null,overviewError:'',overviewFetchSerial:0,reportRange:'all',reportStart:'',reportEnd:'',reportCases:null,reportLoading:false,client:null,user:null,me:null,portal:null,tab:'overview',cases:[],profiles:[],articles:[],steps:[],messages:[],attempts:[],selected:null,filter:'all',status:'',alert:'',channels:[],loginType:'field',unreadCounts:{},unreadReady:false,unreadError:'',soundEnabled:true,audioContext:null,lastSoundAt:0,drafts:{}};
 const e=s=>String(s??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const fmt=d=>d?new Date(d).toLocaleString('en-GB',{dateStyle:'short',timeStyle:'short'}):'—';
 const duration=ms=>ms==null?'—':ms<0?'—':Math.floor(ms/3600000)+'h '+String(Math.floor(ms%3600000/60000)).padStart(2,'0')+'m';
@@ -133,6 +156,97 @@ function updateRequestCountdown(){
  node.textContent=wait?`You can open your next request in ${countdownText(wait)}. Continue chatting in your current request if you need help.`:'You can now open a new request.';
  node.classList.toggle('ready',wait===0);
  if(submit){submit.disabled=wait>0;submit.textContent=wait?'New request available shortly':'Start conversation →';}
+}
+
+// Overview dates use Europe/London, even when a field colleague's device is elsewhere.
+const ukDatePartsFormatter=new Intl.DateTimeFormat('en-GB',{
+ timeZone:'Europe/London',year:'numeric',month:'2-digit',day:'2-digit',
+ hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'
+});
+function ukParts(d){
+ const p=Object.fromEntries(ukDatePartsFormatter.formatToParts(d).filter(x=>x.type!=='literal').map(x=>[x.type,Number(x.value)]));
+ return p;
+}
+function ukDateISO(d=new Date()){
+ const p=ukParts(d);
+ return `${String(p.year).padStart(4,'0')}-${String(p.month).padStart(2,'0')}-${String(p.day).padStart(2,'0')}`;
+}
+function ukMidnightUTC(dateISO,addDays=0){
+ const [year,month,day]=dateISO.split('-').map(Number);
+ const localUTC=Date.UTC(year,month-1,day+addDays);
+ let utc=localUTC;
+ // Iteratively find the UTC instant corresponding to 00:00 Europe/London.
+ // This also handles the one-hour UK daylight-saving offset correctly.
+ for(let i=0;i<3;i++){
+  const p=ukParts(new Date(utc));
+  const londonAsUTC=Date.UTC(p.year,p.month-1,p.day,p.hour,p.minute,p.second);
+  utc=localUTC-(londonAsUTC-utc);
+ }
+ return new Date(utc).toISOString();
+}
+function overviewBounds(){
+ const from=state.overviewMode==='live'?ukDateISO():state.overviewFrom;
+ const to=state.overviewMode==='live'?from:state.overviewTo;
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(from||'')||!/^\d{4}-\d{2}-\d{2}$/.test(to||'')||from>to){
+  throw Error('Choose a valid From and To date. From must not be later than To.');
+ }
+ return {from,to,start:ukMidnightUTC(from),end:ukMidnightUTC(to,1)};
+}
+function overviewDateLabel(iso){
+ const [y,m,d]=iso.split('-').map(Number);
+ return new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',year:'numeric'}).format(new Date(Date.UTC(y,m-1,d,12)));
+}
+async function loadOverviewCases(){
+ const req=++state.overviewFetchSerial;
+ const {start,end}=overviewBounds();
+ state.overviewLoading=true;
+ const rows=[];
+ try{
+  // Date-filter on the server instead of applying filters to only the latest
+  // 1,000 conversations loaded for the other workspaces.
+  for(let offset=0;;offset+=500){
+   const result=await api().from('cases')
+     .select('id,subject,status,created_at,queued_at,assigned_at,resolved_at,assigned_to,field_id')
+     .gte('created_at',start).lt('created_at',end)
+     .order('created_at',{ascending:false}).range(offset,offset+499);
+   if(result.error)throw result.error;
+   if(req!==state.overviewFetchSerial)return;
+   const batch=result.data||[];
+   rows.push(...batch);
+   if(batch.length<500)break;
+  }
+  if(req!==state.overviewFetchSerial)return;
+  state.overviewCases=rows;
+  state.overviewUpdatedAt=Date.now();
+  state.overviewError='';
+ }catch(err){
+  if(req!==state.overviewFetchSerial)return;
+  state.overviewCases=null;
+  state.overviewError=err.message||String(err);
+ }finally{
+  if(req===state.overviewFetchSerial)state.overviewLoading=false;
+ }
+}
+async function applyOverviewDates(ev){
+ ev.preventDefault();
+ const from=document.getElementById('overviewFrom')?.value||'';
+ const to=document.getElementById('overviewTo')?.value||'';
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to){
+  state.alert='Please enter a valid date range (From must not be later than To).';
+  render();return;
+ }
+ state.alert='';state.overviewMode='range';state.overviewFrom=from;state.overviewTo=to;state.overviewDraftFrom=from;state.overviewDraftTo=to;
+ state.overviewCases=null;state.overviewLoading=true;
+ render();await refresh();
+}
+async function activateOverviewLiveToday(){
+ state.alert='';state.overviewMode='live';state.overviewFrom='';state.overviewTo='';state.overviewDraftFrom='';state.overviewDraftTo='';
+ state.overviewCases=null;state.overviewLoading=true;
+ render();await refresh();
+}
+async function refreshOverview(){
+ state.overviewCases=null;state.overviewLoading=true;
+ render();await refresh();
 }
 function localDateISO(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function localMidnightISO(s,addDays=0){const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d+addDays).toISOString();}
@@ -282,10 +396,10 @@ function passwordModal(){el.innerHTML=`<div class="authpage"><form class="authca
  <div style="height:18px"></div><button class="btn full">Update PIN</button></form></div>`;
 }
 async function changePassword(ev){ev.preventDefault();try{const p=document.getElementById('newpw').value;if(p!==document.getElementById('newpw2').value)throw Error('Passwords do not match');if(!/^[0-9]{6}$/.test(p))throw Error('Use exactly six numeric digits');const {error}=await api().auth.updateUser({password:p});if(error)throw error;const r=await api().rpc('change_my_password_completed');if(r.error)throw r.error;state.me.must_change_password=false;setupAgentAlerts();await refresh(true);subscribe()}catch(err){fail(err);passwordModal()}}
-async function refresh(draw=true){try{if(!state.me||state.me.must_change_password)return;const input=document.getElementById('chattext');const hadFocus=draw&&document.activeElement===input;const selection=hadFocus?[input.selectionStart,input.selectionEnd]:null;const c=api();const [cs,ps,as,ss]=await Promise.all([c.from('cases').select('*').order('created_at',{ascending:false}).limit(1000),c.from('profiles').select('id,username,display_name,role,enabled,agent_state,max_chats,available_since,can_monitor,can_takeover,can_reassign').order('display_name'),c.from('articles').select('*').order('title'),c.from('article_steps').select('*').order('ordinal')]);for(const r of [cs,ps,as,ss])if(r.error)throw r.error;state.cases=cs.data||[];state.profiles=ps.data||[];state.articles=as.data||[];state.steps=ss.data||[];if(state.selected&&!state.cases.some(x=>x.id===state.selected))state.selected=null;if(!state.selected&&state.cases.length)state.selected=state.cases[0].id;await loadSelected(false);if(state.me?.role==='agent'){await loadUnreadCounts();if(isChatActuallyVisible()&&state.selected&&unreadFor(state.selected)>0)await markConversationRead(state.selected);}if(draw){render();if(hadFocus){const restored=document.getElementById('chattext');if(restored){restored.focus();try{restored.setSelectionRange(selection[0],selection[1])}catch{}}}}}catch(err){state.alert=err.message;render()}}
+async function refresh(draw=true){try{if(!state.me||state.me.must_change_password)return;const input=document.getElementById('chattext');const hadFocus=draw&&document.activeElement===input;const selection=hadFocus?[input.selectionStart,input.selectionEnd]:null;const c=api();const [cs,ps,as,ss]=await Promise.all([c.from('cases').select('*').order('created_at',{ascending:false}).limit(1000),c.from('profiles').select('id,username,display_name,role,enabled,agent_state,max_chats,available_since,can_monitor,can_takeover,can_reassign').order('display_name'),c.from('articles').select('*').order('title'),c.from('article_steps').select('*').order('ordinal')]);for(const r of [cs,ps,as,ss])if(r.error)throw r.error;state.cases=cs.data||[];state.profiles=ps.data||[];state.articles=as.data||[];state.steps=ss.data||[];if(state.selected&&!state.cases.some(x=>x.id===state.selected))state.selected=null;if(!state.selected&&state.cases.length)state.selected=state.cases[0].id;await loadSelected(false);if(state.tab==='overview'&&(state.overviewMode==='live'||state.overviewCases===null))await loadOverviewCases();if(state.me?.role==='agent'){await loadUnreadCounts();if(isChatActuallyVisible()&&state.selected&&unreadFor(state.selected)>0)await markConversationRead(state.selected);}if(draw){const dateInputFocused=state.tab==='overview'&&document.activeElement?.matches?.('#overviewFrom,#overviewTo');if(dateInputFocused)return;render();if(hadFocus){const restored=document.getElementById('chattext');if(restored){restored.focus();try{restored.setSelectionRange(selection[0],selection[1])}catch{}}}}}catch(err){state.alert=err.message;render()}}
 async function loadSelected(draw=true){if(!state.selected){state.messages=[];state.attempts=[];return}const [m,a]=await Promise.all([api().from('messages').select('*').eq('case_id',state.selected).order('created_at'),api().from('step_attempts').select('*').eq('case_id',state.selected)]);if(m.error)throw m.error;if(a.error)throw a.error;state.messages=m.data||[];state.attempts=a.data||[];if(draw)render()}
 function subscribe(){state.channels.forEach(ch=>api().removeChannel(ch));state.channels=[];const ch=api().channel('resolve-refresh-'+state.user.id).on('postgres_changes',{event:'*',schema:'public',table:'cases'},scheduleLiveRefresh).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'},scheduleLiveRefresh).on('postgres_changes',{event:'*',schema:'public',table:'profiles'},scheduleLiveRefresh).subscribe();state.channels=[ch]}
-setInterval(()=>{if(state.me?.role==='agent'&&document.visibilityState==='visible')scheduleLiveRefresh()},15000);
+setInterval(()=>{if(state.me&&document.visibilityState==='visible'&&(state.me.role==='agent'||(state.tab==='overview'&&state.overviewMode==='live')))scheduleLiveRefresh()},15000);
 async function logout(){try{if(state.me?.role==='agent')await api().rpc('set_my_presence',{p_state:'offline'});await api().auth.signOut()}catch{}state.channels.forEach(ch=>api().removeChannel(ch));Object.assign(state,{user:null,me:null,portal:null,selected:null,cases:[],messages:[],alert:'',unreadCounts:{},unreadReady:false,unreadError:'',drafts:{}});home()}
 function header(){return `<header class="top"><div class="brand-lockup">${logoMark()}<span class="logo-caption">Resolve</span></div><div class="topright">${themeButton()}${soundToggleButton()}<span class="muted">${e(state.me.display_name)} · ${e(state.me.role)}</span>${btn('Sign out','logout()','alt sm')}</div></header>`}
 
@@ -294,6 +408,7 @@ async function openTab(id){
  if(state.me?.role==='agent')unlockNotificationAudio();
  state.tab=id;state.filter='all';
  if(id==='reports'&&state.me?.role==='manager')await loadReportCases();
+ else if(id==='overview'&&(state.overviewMode==='live'||state.overviewCases===null))await refresh();
  else render();
 }
 function render(){if(!state.me){if(state.loginType)login(state.loginType);else home();return}if(state.me.must_change_password){passwordModal();return}if(state.portal==='field'&&!['new','conversations'].includes(state.tab))state.tab='conversations';if(state.portal==='staff'&&!['overview','inbox','monitor','team','knowledge','reports','accounts'].includes(state.tab))state.tab='overview';let content='';if(state.tab==='new')content=newRequest();else if(state.tab==='conversations'||state.tab==='inbox')content=inbox();else if(state.tab==='monitor')content=monitorPage();else if(state.tab==='knowledge')content=knowledgePage();else if(state.tab==='overview')content=overview();else if(state.tab==='team')content=team();else if(state.tab==='reports')content=reports();else if(state.tab==='accounts')content=accounts();el.innerHTML=`<div class="shell">${header()}<div class="layout">${nav()}<main class="main">${showAlert()}${content}<div class="footer">Resolve · Protected by Supabase authentication and database policies · Times shown in your browser's timezone</div></main></div></div>`;const msgs=document.getElementById('messages');if(msgs)msgs.scrollTop=msgs.scrollHeight}
@@ -454,7 +569,55 @@ async function deleteKnowledge(id){
 }
 function returnToAI(id){callRpc('return_case_to_ai',{p_case_id:id})}
 
-function overview(){const cs=state.cases;const waiting=cs.filter(c=>c.status==='queued');const agent=state.me.role==='agent';const activeAgents=state.profiles.filter(p=>p.role==='agent'&&p.enabled&&(p.agent_state==='available'||p.agent_state==='busy')).sort((a,b)=>Number(a.agent_state==='busy')-Number(b.agent_state==='busy')||a.display_name.localeCompare(b.display_name));return `<div class="pagehead"><div><h2>Call centre overview</h2><p class="muted">${agent?'Monitor AI conversations and handle assigned requests.':'Live view of Technical Support.'}</p></div><div class="toolbar">${agent?`<select style="max-width:170px" onchange="setPresence(this.value)">${['offline','available','busy'].map(x=>`<option value="${x}" ${state.me.agent_state===x?'selected':''}>${x}</option>`).join('')}</select>`:''}${btn('Refresh','refresh()','alt sm')}</div></div><div class="cards"><div class="card"><span class="muted small">AI assisting</span><div class="metric">${cs.filter(c=>c.status==='ai').length}</div></div><div class="card"><span class="muted small">Waiting in queue</span><div class="metric">${waiting.length}</div></div><div class="card"><span class="muted small">With an agent</span><div class="metric">${cs.filter(c=>c.status==='assigned').length}</div></div><div class="card"><span class="muted small">Resolved</span><div class="metric">${cs.filter(c=>c.status==='resolved').length}</div></div></div><div class="grid2"><div class="card"><h3>Agent availability</h3>${activeAgents.map(p=>`<div style="padding:9px 0;border-bottom:1px solid #eef2f7"><b>${e(name(p.id))}</b><span class="muted small" style="float:right">${e(p.agent_state)} · ${cs.filter(c=>c.assigned_to===p.id&&c.status==='assigned').length}/${p.max_chats}</span></div>`).join('')||'<p class="muted small">No agents are currently Available or Busy.</p>'}</div><div class="card"><h3>Oldest waiting conversations</h3>${waiting.sort((a,b)=>a.queued_at.localeCompare(b.queued_at)).slice(0,8).map(c=>`<div style="padding:10px 0;border-bottom:1px solid #eef2f7"><b>${e(c.subject)}</b><span style="float:right" class="small muted">${duration(queueMs(c))}</span></div>`).join('')||'<p class="muted">No one is waiting.</p>'}<div style="margin-top:16px">${btn('Open all conversations',"state.tab='inbox';render()",'soft')}</div></div></div>`}
+function overview(){
+ const live=state.overviewMode==='live';
+ const today=ukDateISO();
+ const from=live?today:(state.overviewFrom||today);
+ const to=live?today:(state.overviewTo||today);
+ const draftFrom=state.overviewDraftFrom||from;
+ const draftTo=state.overviewDraftTo||to;
+ const cs=state.overviewCases||[];
+ const waiting=cs.filter(c=>c.status==='queued');
+ const agent=state.me.role==='agent';
+ const countsReady=Array.isArray(state.overviewCases);
+ const displayCount=n=>state.overviewLoading&&!countsReady?'…':!countsReady?'—':n;
+ // Agent availability is always a CURRENT snapshot, not filtered to case dates.
+ const activeAgents=state.profiles.filter(p=>p.role==='agent'&&p.enabled&&(p.agent_state==='available'||p.agent_state==='busy'))
+  .sort((a,b)=>Number(a.agent_state==='busy')-Number(b.agent_state==='busy')||a.display_name.localeCompare(b.display_name));
+ const updated=state.overviewUpdatedAt?new Date(state.overviewUpdatedAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'Europe/London'}):'Not yet updated';
+ const timeLabel=live?`Today, ${overviewDateLabel(today)}`:`${overviewDateLabel(from)} – ${overviewDateLabel(to)}`;
+ const waitingRows=waiting.slice().sort((a,b)=>Date.parse(a.queued_at||a.created_at)-Date.parse(b.queued_at||b.created_at))
+  .slice(0,8).map(c=>`<div style="padding:10px 0;border-bottom:1px solid #eef2f7"><b>${e(c.subject)}</b><span style="float:right" class="small muted">${duration(queueMs(c))}</span></div>`).join('');
+ const capacityRows=activeAgents.map(p=>`<div style="padding:9px 0;border-bottom:1px solid #eef2f7"><b>${e(name(p.id))}</b><span class="muted small" style="float:right">${e(p.agent_state)} · ${state.cases.filter(c=>c.assigned_to===p.id&&c.status==='assigned').length}/${p.max_chats}</span></div>`).join('');
+ return `<div class="pagehead"><div><h2>Call centre overview</h2><p class="muted">${agent?'Monitor AI conversations and handle assigned requests.':'Technical Support activity, filtered by request date.'}</p></div><div class="toolbar">${agent?`<select style="max-width:170px" onchange="setPresence(this.value)">${['offline','available','busy'].map(x=>`<option value="${x}" ${state.me.agent_state===x?'selected':''}>${x}</option>`).join('')}</select>`:''}${btn('↻ Refresh','refreshOverview()','alt sm')}</div></div>
+ <section class="card overview-filter" aria-label="Overview date filters">
+  <div class="overview-filter-row">
+   <div>
+    <div class="overview-filter-heading"><strong>Activity period</strong><span class="overview-mode-label ${live?'':'history'}">${live?'● LIVE TODAY':'DATE RANGE'}</span></div>
+    <p class="overview-filter-desc">${live?'Today’s figures update automatically every 15 seconds and when new activity is received.':'Review conversation activity for the selected UK dates. Click Live Today to return to current activity.'}</p>
+   </div>
+   <form class="overview-controls" onsubmit="applyOverviewDates(event)">
+    <div class="overview-date-field"><label for="overviewFrom">From</label><input id="overviewFrom" aria-label="Start date" type="date" value="${draftFrom}" oninput="state.overviewDraftFrom=this.value" onchange="state.overviewDraftFrom=this.value" required></div>
+    <div class="overview-date-field"><label for="overviewTo">To</label><input id="overviewTo" aria-label="End date" type="date" value="${draftTo}" oninput="state.overviewDraftTo=this.value" onchange="state.overviewDraftTo=this.value" required></div>
+    <button type="submit" class="btn alt sm">Apply dates</button>
+    <button type="button" class="btn sm overview-live-btn ${live?'active':''}" aria-pressed="${live}" onclick="activateOverviewLiveToday()"><span class="overview-live-dot"></span> Live Today</button>
+   </form>
+  </div>
+  <div class="overview-period"><span><b>${e(timeLabel)}</b> · Times and dates use UK time</span><span>${state.overviewLoading?'Updating…':`Last updated ${e(updated)}`}</span></div>
+  ${state.overviewError?`<div class="notice error" role="alert">Could not load overview data: ${e(state.overviewError)}</div>`:''}
+ </section>
+ <p class="overview-count-note">${live?'Showing only requests created today — yesterday’s resolved conversations are not included.':'Showing only requests created within the selected dates.'} ${countsReady?`<b>${cs.length}</b> total request${cs.length===1?'':'s'} in this period.`:''} Earlier open requests remain accessible in Live conversations.</p>
+ <div class="cards">
+  <div class="card"><span class="muted small">AI assisting</span><div class="metric">${displayCount(cs.filter(c=>c.status==='ai').length)}</div></div>
+  <div class="card"><span class="muted small">Waiting in queue</span><div class="metric">${displayCount(waiting.length)}</div></div>
+  <div class="card"><span class="muted small">With an agent</span><div class="metric">${displayCount(cs.filter(c=>c.status==='assigned').length)}</div></div>
+  <div class="card"><span class="muted small">Resolved</span><div class="metric">${displayCount(cs.filter(c=>c.status==='resolved').length)}</div></div>
+ </div>
+ <div class="grid2">
+  <div class="card"><h3>Agent availability <span class="small muted" style="font-weight:normal">(current)</span></h3>${capacityRows||'<p class="muted small">No agents are currently Available or Busy.</p>'}</div>
+  <div class="card"><h3>Oldest waiting conversations <span class="small muted" style="font-weight:normal">(selected dates)</span></h3>${state.overviewLoading&&!countsReady?'<p class="muted">Loading conversations…</p>':waitingRows||'<p class="muted">No one is waiting in this period.</p>'}<div style="margin-top:16px">${btn('Open all conversations',"state.tab='inbox';render()",'soft')}</div></div>
+ </div>`;
+}
 async function setPresence(s){try{const r=await api().rpc('set_my_presence',{p_state:s});if(r.error)throw r.error;state.me.agent_state=s;await refresh()}catch(err){fail(err)}}
 function team(){const ps=state.profiles.filter(p=>p.role==='agent');const manager=state.me.role==='manager';return `<div class="pagehead"><h2>Agent team · ${ps.length} accounts</h2></div><div class="tablewrap"><table><thead><tr><th>Agent</th><th>Username</th><th>Availability</th><th>Active chats</th><th>Capacity</th>${manager?'<th>Permissions</th>':''}</tr></thead><tbody>${ps.map(p=>`<tr><td><b>${e(name(p.id))}</b>${!p.enabled&&!formerProfile(p)?' · disabled':''}</td><td>${e(p.username)}</td><td><span class="chip">${e(p.agent_state)}</span></td><td>${state.cases.filter(c=>c.status==='assigned'&&c.assigned_to===p.id).length}</td><td>${p.max_chats}</td>${manager?`<td>${formerProfile(p)?'<span class="small muted">Historical account</span>':btn('Configure',`configureAgent('${p.id}')`,'alt sm')}</td>`:''}</tr>`).join('')}</tbody></table></div>`}
 function configureAgent(id){const p=state.profiles.find(x=>x.id===id);if(!p)return;el.insertAdjacentHTML('beforeend',`<div class="overlay" id="overlay"><form class="modal" onsubmit="saveAgent(event,'${id}')"><h2>${e(p.display_name)}</h2><p class="muted small">Permissions are verified by the database.</p><label>Maximum simultaneous chats</label><input type="number" id="maxchats" min="1" max="20" value="${p.max_chats}" required><label><input type="checkbox" id="enabled" style="width:auto" ${p.enabled?'checked':''}> Account enabled</label><label><input type="checkbox" id="monitor" style="width:auto" ${p.can_monitor?'checked':''}> Monitor all AI conversations</label><label><input type="checkbox" id="takeover" style="width:auto" ${p.can_takeover?'checked':''}> Take over AI conversations</label><label><input type="checkbox" id="reassign" style="width:auto" ${p.can_reassign?'checked':''}> Reassign conversations</label><div class="actions" style="margin-top:18px"><button type="submit" class="btn">Save settings</button>${btn('Cancel',"document.getElementById('overlay').remove()",'alt')}</div></form></div>`)}
