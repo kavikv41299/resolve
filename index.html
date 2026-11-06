@@ -112,6 +112,15 @@
 [data-theme="dark"] .overview-mode-label{background:#20493b;color:#c9f4dc}
 [data-theme="dark"] .overview-mode-label.history{background:#243e68;color:#c9daff}
 @media(max-width:750px){.overview-filter-row{align-items:stretch}.overview-controls{width:100%}.overview-controls .overview-date-field{flex:1;min-width:125px}.overview-controls input[type="date"]{width:100%}.overview-controls .btn{flex:1}}
+
+/* Manager-only presence controls */
+.agent-presence-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #eef2f7}
+.agent-presence-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.manager-presence{min-width:110px;max-width:146px;width:auto;padding:7px 26px 7px 10px;border:1px solid #cbd6e7;border-radius:9px;background:var(--surface,#fff);color:inherit;font-size:12px;font-weight:650}
+.manager-presence:focus-visible{outline:2px solid #3865ed;outline-offset:2px}
+.presence-available{background:#e2f5eb;color:#196746}.presence-busy{background:#fff0d7;color:#87520d}.presence-offline{background:#edf1f6;color:#65778f}
+@media(max-width:620px){.agent-presence-row{align-items:flex-start;flex-direction:column}.agent-presence-actions{width:100%;justify-content:space-between}.manager-presence{min-width:120px}}
+
 </style></head><body><div id="app"></div><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.min.js'"></script><script>
 /* Public project credentials only; the SERVICE_ROLE key must NEVER be placed here. */
 const CONFIG={url:'https://qegoaryhedsttjcnvljz.supabase.co',anon:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFlZ29hcnloZWRzdHRqY252bGp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM3MTU1MzEsImV4cCI6MjEwOTI5MTUzMX0.OQpXIG42O6QgKVC2-Z9-MAoa8hnZlbAexol4LlSrtKw'};
@@ -124,7 +133,7 @@ function themeButton(){return `<button type="button" class="theme-toggle" data-t
 function logoMark(){return `<img class="verisure-logo" src="https://asset.brandfetch.io/id98I3Kz6C/id-kzK5uj2.png?updated=1716597061125" alt="Verisure" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'brand-fallback',textContent:'verisure'}))">`}
 setTheme(theme());
 setInterval(updateRequestCountdown,1000);
-const el=document.getElementById('app');const state={overviewMode:'live',overviewFrom:'',overviewTo:'',overviewDraftFrom:'',overviewDraftTo:'',overviewCases:null,overviewLoading:false,overviewUpdatedAt:null,overviewError:'',overviewFetchSerial:0,reportRange:'all',reportStart:'',reportEnd:'',reportCases:null,reportLoading:false,client:null,user:null,me:null,portal:null,tab:'overview',cases:[],profiles:[],articles:[],steps:[],messages:[],attempts:[],selected:null,filter:'all',status:'',alert:'',channels:[],loginType:'field',unreadCounts:{},unreadReady:false,unreadError:'',soundEnabled:true,audioContext:null,lastSoundAt:0,drafts:{}};
+const el=document.getElementById('app');const state={overviewMode:'live',overviewFrom:'',overviewTo:'',overviewDraftFrom:'',overviewDraftTo:'',overviewCases:null,overviewLoading:false,overviewUpdatedAt:null,overviewError:'',overviewFetchSerial:0,reportRange:'all',reportStart:'',reportEnd:'',reportCases:null,reportLoading:false,client:null,user:null,me:null,portal:null,tab:'overview',cases:[],profiles:[],articles:[],steps:[],messages:[],attempts:[],selected:null,filter:'all',status:'',alert:'',channels:[],loginType:'field',unreadCounts:{},unreadReady:false,unreadError:'',soundEnabled:true,audioContext:null,lastSoundAt:0,drafts:{},onlineAgents:[],onlineAgentsReady:false,onlineAgentsError:'',presenceTouchInFlight:false,signingOut:false};
 const e=s=>String(s??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const fmt=d=>d?new Date(d).toLocaleString('en-GB',{dateStyle:'short',timeStyle:'short'}):'—';
 const duration=ms=>ms==null?'—':ms<0?'—':Math.floor(ms/3600000)+'h '+String(Math.floor(ms%3600000/60000)).padStart(2,'0')+'m';
@@ -387,7 +396,25 @@ function login(type){state.loginType=type;el.innerHTML=`<div class="authpage"><f
  </form></div>`;
 }
 async function signIn(ev){ev.preventDefault();unlockNotificationAudio();state.alert='';try{const username=document.getElementById('username').value.trim().toLowerCase();const password=document.getElementById('password').value;if(!/^[0-9]{6}$/.test(password))throw Error('Enter a six-digit PIN');const {data,error}=await api().auth.signInWithPassword({email:username+'@resolve-login.invalid',password});if(error)throw error;state.user=data.user;await initSession();if(state.loginType==='field'&&state.me.role!=='field'||state.loginType==='staff'&&state.me.role==='field'){await api().auth.signOut();state.user=null;state.me=null;throw Error('This account cannot use this portal.');}}catch(err){fail(err)}}
-async function initSession(){const {data,error}=await api().from('profiles').select('*').eq('id',state.user.id).single();if(error||!data?.enabled){await api().auth.signOut();throw Error('Account not authorised or disabled.')}state.me=data;state.portal=data.role==='field'?'field':'staff';if(state.loginType==='field'&&data.role!=='field'||state.loginType==='staff'&&data.role==='field'){await api().auth.signOut();throw Error('Please use the correct login portal for your role.');}if(data.must_change_password){passwordModal();return}setupAgentAlerts();await refresh(true);subscribe();}
+// Server presence: a status of Available is NOT proof that somebody is signed in.
+async function touchAgentPresence(){
+ if(state.me?.role!=='agent'||state.signingOut||state.presenceTouchInFlight)return false;
+ state.presenceTouchInFlight=true;
+ try{
+  const {error}=await api().rpc('resolve_agent_heartbeat');
+  if(error)throw error;
+  return true;
+ }catch(err){
+  console.warn('Agent heartbeat failed:',err.message||String(err));
+  return false;
+ }finally{state.presenceTouchInFlight=false;}
+}
+setInterval(()=>{if(state.me?.role==='agent'&&!state.signingOut)void touchAgentPresence()},25000);
+document.addEventListener('visibilitychange',()=>{
+ if(document.visibilityState==='visible'&&state.me?.role==='agent')void touchAgentPresence();
+});
+window.addEventListener('focus',()=>{if(state.me?.role==='agent')void touchAgentPresence()});
+async function initSession(){const {data,error}=await api().from('profiles').select('*').eq('id',state.user.id).single();if(error||!data?.enabled){await api().auth.signOut();throw Error('Account not authorised or disabled.')}state.me=data;state.portal=data.role==='field'?'field':'staff';if(state.loginType==='field'&&data.role!=='field'||state.loginType==='staff'&&data.role==='field'){await api().auth.signOut();throw Error('Please use the correct login portal for your role.');}if(data.must_change_password){passwordModal();return}setupAgentAlerts();if(state.me.role==='agent')await touchAgentPresence();await refresh(true);subscribe();}
 function passwordModal(){el.innerHTML=`<div class="authpage"><form class="authcard" onsubmit="changePassword(event)">
  <div class="login-brand">${logoMark()}${themeButton()}</div><h2 style="margin-top:18px">Set your personal PIN</h2>
  <p class="muted small">Your temporary PIN must be changed before using Resolve. Avoid dates, repeated numbers or sequential PINs.</p>${showAlert()}
@@ -395,12 +422,34 @@ function passwordModal(){el.innerHTML=`<div class="authpage"><form class="authca
  <label>Confirm six-digit PIN</label><input type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" minlength="6" id="newpw2" required autocomplete="new-password">
  <div style="height:18px"></div><button class="btn full">Update PIN</button></form></div>`;
 }
-async function changePassword(ev){ev.preventDefault();try{const p=document.getElementById('newpw').value;if(p!==document.getElementById('newpw2').value)throw Error('Passwords do not match');if(!/^[0-9]{6}$/.test(p))throw Error('Use exactly six numeric digits');const {error}=await api().auth.updateUser({password:p});if(error)throw error;const r=await api().rpc('change_my_password_completed');if(r.error)throw r.error;state.me.must_change_password=false;setupAgentAlerts();await refresh(true);subscribe()}catch(err){fail(err);passwordModal()}}
-async function refresh(draw=true){try{if(!state.me||state.me.must_change_password)return;const input=document.getElementById('chattext');const hadFocus=draw&&document.activeElement===input;const selection=hadFocus?[input.selectionStart,input.selectionEnd]:null;const c=api();const [cs,ps,as,ss]=await Promise.all([c.from('cases').select('*').order('created_at',{ascending:false}).limit(1000),c.from('profiles').select('id,username,display_name,role,enabled,agent_state,max_chats,available_since,can_monitor,can_takeover,can_reassign').order('display_name'),c.from('articles').select('*').order('title'),c.from('article_steps').select('*').order('ordinal')]);for(const r of [cs,ps,as,ss])if(r.error)throw r.error;state.cases=cs.data||[];state.profiles=ps.data||[];state.articles=as.data||[];state.steps=ss.data||[];if(state.selected&&!state.cases.some(x=>x.id===state.selected))state.selected=null;if(!state.selected&&state.cases.length)state.selected=state.cases[0].id;await loadSelected(false);if(state.tab==='overview'&&(state.overviewMode==='live'||state.overviewCases===null))await loadOverviewCases();if(state.me?.role==='agent'){await loadUnreadCounts();if(isChatActuallyVisible()&&state.selected&&unreadFor(state.selected)>0)await markConversationRead(state.selected);}if(draw){const dateInputFocused=state.tab==='overview'&&document.activeElement?.matches?.('#overviewFrom,#overviewTo');if(dateInputFocused)return;render();if(hadFocus){const restored=document.getElementById('chattext');if(restored){restored.focus();try{restored.setSelectionRange(selection[0],selection[1])}catch{}}}}}catch(err){state.alert=err.message;render()}}
+async function changePassword(ev){ev.preventDefault();try{const p=document.getElementById('newpw').value;if(p!==document.getElementById('newpw2').value)throw Error('Passwords do not match');if(!/^[0-9]{6}$/.test(p))throw Error('Use exactly six numeric digits');const {error}=await api().auth.updateUser({password:p});if(error)throw error;const r=await api().rpc('change_my_password_completed');if(r.error)throw r.error;state.me.must_change_password=false;setupAgentAlerts();if(state.me.role==='agent')await touchAgentPresence();await refresh(true);subscribe()}catch(err){fail(err);passwordModal()}}
+async function refresh(draw=true){try{if(!state.me||state.me.must_change_password)return;const input=document.getElementById('chattext');const hadFocus=draw&&document.activeElement===input;const selection=hadFocus?[input.selectionStart,input.selectionEnd]:null;const c=api();const [cs,ps,as,ss]=await Promise.all([c.from('cases').select('*').order('created_at',{ascending:false}).limit(1000),c.from('profiles').select('id,username,display_name,role,enabled,agent_state,max_chats,available_since,can_monitor,can_takeover,can_reassign').order('display_name'),c.from('articles').select('*').order('title'),c.from('article_steps').select('*').order('ordinal')]);for(const r of [cs,ps,as,ss])if(r.error)throw r.error;state.cases=cs.data||[];state.profiles=ps.data||[];
+ if(state.me?.role==='agent'||state.me?.role==='manager'){
+  const online=await c.rpc('resolve_online_agents');
+  if(online.error){
+   state.onlineAgents=[];state.onlineAgentsReady=false;
+   state.onlineAgentsError=online.error.message||'Online session lookup unavailable';
+  }else{
+   state.onlineAgents=(online.data||[]).map(x=>x.agent_id);
+   state.onlineAgentsReady=true;state.onlineAgentsError='';
+  }
+ }
+ if(state.me?.role==='agent'){const own=state.profiles.find(p=>p.id===state.me.id);if(own)state.me.agent_state=own.agent_state;}state.articles=as.data||[];state.steps=ss.data||[];if(state.selected&&!state.cases.some(x=>x.id===state.selected))state.selected=null;if(!state.selected&&state.cases.length)state.selected=state.cases[0].id;await loadSelected(false);if(state.tab==='overview'&&(state.overviewMode==='live'||state.overviewCases===null))await loadOverviewCases();if(state.me?.role==='agent'){await loadUnreadCounts();if(isChatActuallyVisible()&&state.selected&&unreadFor(state.selected)>0)await markConversationRead(state.selected);}if(draw){const dateInputFocused=state.tab==='overview'&&document.activeElement?.matches?.('#overviewFrom,#overviewTo');if(dateInputFocused)return;render();if(hadFocus){const restored=document.getElementById('chattext');if(restored){restored.focus();try{restored.setSelectionRange(selection[0],selection[1])}catch{}}}}}catch(err){state.alert=err.message;render()}}
 async function loadSelected(draw=true){if(!state.selected){state.messages=[];state.attempts=[];return}const [m,a]=await Promise.all([api().from('messages').select('*').eq('case_id',state.selected).order('created_at'),api().from('step_attempts').select('*').eq('case_id',state.selected)]);if(m.error)throw m.error;if(a.error)throw a.error;state.messages=m.data||[];state.attempts=a.data||[];if(draw)render()}
 function subscribe(){state.channels.forEach(ch=>api().removeChannel(ch));state.channels=[];const ch=api().channel('resolve-refresh-'+state.user.id).on('postgres_changes',{event:'*',schema:'public',table:'cases'},scheduleLiveRefresh).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'},scheduleLiveRefresh).on('postgres_changes',{event:'*',schema:'public',table:'profiles'},scheduleLiveRefresh).subscribe();state.channels=[ch]}
-setInterval(()=>{if(state.me&&document.visibilityState==='visible'&&(state.me.role==='agent'||(state.tab==='overview'&&state.overviewMode==='live')))scheduleLiveRefresh()},15000);
-async function logout(){try{if(state.me?.role==='agent')await api().rpc('set_my_presence',{p_state:'offline'});await api().auth.signOut()}catch{}state.channels.forEach(ch=>api().removeChannel(ch));Object.assign(state,{user:null,me:null,portal:null,selected:null,cases:[],messages:[],alert:'',unreadCounts:{},unreadReady:false,unreadError:'',drafts:{}});home()}
+setInterval(()=>{if(state.me&&document.visibilityState==='visible'&&(state.me.role==='agent'||(state.me.role==='manager'&&state.tab==='team')||(state.tab==='overview'&&state.overviewMode==='live')))scheduleLiveRefresh()},15000);
+async function logout(){
+ state.signingOut=true;
+ try{
+  if(state.me?.role==='agent'){
+   await api().rpc('resolve_agent_signing_out');
+  }
+ }catch(err){console.warn('Could not end agent heartbeat:',err.message||String(err))}
+ try{await api().auth.signOut({scope:'local'})}catch(err){console.warn('Sign-out failed:',err.message||String(err))}
+ state.channels.forEach(ch=>api().removeChannel(ch));
+ Object.assign(state,{user:null,me:null,portal:null,selected:null,cases:[],messages:[],alert:'',unreadCounts:{},unreadReady:false,unreadError:'',drafts:{},onlineAgents:[],onlineAgentsReady:false,onlineAgentsError:'',signingOut:false});
+ home();
+}
 function header(){return `<header class="top"><div class="brand-lockup">${logoMark()}<span class="logo-caption">Resolve</span></div><div class="topright">${themeButton()}${soundToggleButton()}<span class="muted">${e(state.me.display_name)} · ${e(state.me.role)}</span>${btn('Sign out','logout()','alt sm')}</div></header>`}
 
 function nav(){const tabs=state.me.role==='field'?[['conversations','My conversations'],['new','Ask Resolve']]:[['overview','Overview'],['inbox','Live conversations'],['monitor','AI monitoring'],['team','Agent team'],...(state.me.role==='manager'?[['knowledge','Knowledge base'],['reports','Reports & exports'],['accounts','Account management']]:[])];return `<aside class="sidebar">${tabs.map(([id,title])=>`<button class="${state.tab===id?'active':''}" onclick="openTab('${id}')">${title}${id==='inbox'&&state.me?.role==='agent'&&unreadTotal()>0?`<span class="nav-unread" aria-label="${unreadTotal()} unread messages">${unreadTotal()>99?'99+':unreadTotal()}</span>`:''}</button>`).join('')}</aside>`}
@@ -582,13 +631,13 @@ function overview(){
  const countsReady=Array.isArray(state.overviewCases);
  const displayCount=n=>state.overviewLoading&&!countsReady?'…':!countsReady?'—':n;
  // Agent availability is always a CURRENT snapshot, not filtered to case dates.
- const activeAgents=state.profiles.filter(p=>p.role==='agent'&&p.enabled&&(p.agent_state==='available'||p.agent_state==='busy'))
+ const activeAgents=state.profiles.filter(p=>p.role==='agent'&&p.enabled&&agentIsOnline(p.id)&&(p.agent_state==='available'||p.agent_state==='busy'))
   .sort((a,b)=>Number(a.agent_state==='busy')-Number(b.agent_state==='busy')||a.display_name.localeCompare(b.display_name));
  const updated=state.overviewUpdatedAt?new Date(state.overviewUpdatedAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'Europe/London'}):'Not yet updated';
  const timeLabel=live?`Today, ${overviewDateLabel(today)}`:`${overviewDateLabel(from)} – ${overviewDateLabel(to)}`;
  const waitingRows=waiting.slice().sort((a,b)=>Date.parse(a.queued_at||a.created_at)-Date.parse(b.queued_at||b.created_at))
   .slice(0,8).map(c=>`<div style="padding:10px 0;border-bottom:1px solid #eef2f7"><b>${e(c.subject)}</b><span style="float:right" class="small muted">${duration(queueMs(c))}</span></div>`).join('');
- const capacityRows=activeAgents.map(p=>`<div style="padding:9px 0;border-bottom:1px solid #eef2f7"><b>${e(name(p.id))}</b><span class="muted small" style="float:right">${e(p.agent_state)} · ${state.cases.filter(c=>c.assigned_to===p.id&&c.status==='assigned').length}/${p.max_chats}</span></div>`).join('');
+ const capacityRows=activeAgents.map(p=>`<div class="agent-presence-row"><b>${e(name(p.id))}</b><div class="agent-presence-actions"><span class="muted small">${state.cases.filter(c=>c.assigned_to===p.id&&c.status==='assigned').length}/${p.max_chats} chats</span>${state.me.role==='manager'?managerPresenceSelect(p):`<span class="chip presence-${e(p.agent_state)}">${e(p.agent_state)}</span>`}</div></div>`).join('');
  return `<div class="pagehead"><div><h2>Call centre overview</h2><p class="muted">${agent?'Monitor AI conversations and handle assigned requests.':'Technical Support activity, filtered by request date.'}</p></div><div class="toolbar">${agent?`<select style="max-width:170px" onchange="setPresence(this.value)">${['offline','available','busy'].map(x=>`<option value="${x}" ${state.me.agent_state===x?'selected':''}>${x}</option>`).join('')}</select>`:''}${btn('↻ Refresh','refreshOverview()','alt sm')}</div></div>
  <section class="card overview-filter" aria-label="Overview date filters">
   <div class="overview-filter-row">
@@ -619,7 +668,37 @@ function overview(){
  </div>`;
 }
 async function setPresence(s){try{const r=await api().rpc('set_my_presence',{p_state:s});if(r.error)throw r.error;state.me.agent_state=s;await refresh()}catch(err){fail(err)}}
-function team(){const ps=state.profiles.filter(p=>p.role==='agent');const manager=state.me.role==='manager';return `<div class="pagehead"><h2>Agent team · ${ps.length} accounts</h2></div><div class="tablewrap"><table><thead><tr><th>Agent</th><th>Username</th><th>Availability</th><th>Active chats</th><th>Capacity</th>${manager?'<th>Permissions</th>':''}</tr></thead><tbody>${ps.map(p=>`<tr><td><b>${e(name(p.id))}</b>${!p.enabled&&!formerProfile(p)?' · disabled':''}</td><td>${e(p.username)}</td><td><span class="chip">${e(p.agent_state)}</span></td><td>${state.cases.filter(c=>c.status==='assigned'&&c.assigned_to===p.id).length}</td><td>${p.max_chats}</td>${manager?`<td>${formerProfile(p)?'<span class="small muted">Historical account</span>':btn('Configure',`configureAgent('${p.id}')`,'alt sm')}</td>`:''}</tr>`).join('')}</tbody></table></div>`}
+function agentIsOnline(id){return state.onlineAgentsReady&&state.onlineAgents.includes(id)}
+function managerPresenceSelect(p){
+ if(state.me?.role!=='manager'||!p.enabled||formerProfile(p))return `<span class="chip presence-offline">${formerProfile(p)?'Former':'Disabled'}</span>`;
+ if(!state.onlineAgentsReady)return `<span class="chip presence-offline" title="Could not verify login session">Status locked · checking login</span>`;
+ if(!agentIsOnline(p.id))return `<span class="chip presence-offline" title="This agent is signed out or disconnected. A manager cannot change their status.">Logged out · Offline</span>`;
+ return `<select class="manager-presence" aria-label="Set ${e(p.display_name)} availability" title="Agent signed in — change availability" onchange="managerSetAgentStatus('${p.id}',this.value)">
+  ${[['available','Available'],['busy','Busy'],['offline','Offline']].map(([value,label])=>`<option value="${value}" ${p.agent_state===value?'selected':''}>${label}</option>`).join('')}
+ </select>`;
+}
+async function managerSetAgentStatus(id,newState){
+ if(state.me?.role!=='manager'||!state.onlineAgentsReady||!agentIsOnline(id))return;
+ if(!['available','busy','offline'].includes(newState))return;
+ const target=state.profiles.find(p=>p.id===id);
+ if(!target||target.role!=='agent'||!target.enabled||formerProfile(target))return;
+ try{
+  const {error}=await api().rpc('admin_set_agent_presence',{p_agent_id:id,p_state:newState});
+  if(error)throw error;
+  state.alert='';await refresh();
+ }catch(err){
+  state.alert='Unable to change agent availability: '+(err.message||String(err));
+  await refresh();render();
+ }
+}
+function team(){
+ const ps=state.profiles.filter(p=>p.role==='agent');
+ const manager=state.me.role==='manager';
+ return `<div class="pagehead"><div><h2>Agent team · ${ps.length} accounts</h2><p class="muted small">${manager?'Managers can change availability only for signed-in agents. Logged-out accounts are locked. Existing assigned chats are not removed.':'Current agent availability and workload.'}</p></div></div>
+ ${manager&&!state.onlineAgentsReady?`<div class="notice error">Agent login status could not be verified. Run the 010 Supabase migration before trying to change availability. ${e(state.onlineAgentsError)}</div>`:''}<div class="tablewrap"><table><thead><tr><th>Agent</th><th>Username</th><th>Availability</th><th>Active chats</th><th>Capacity</th>${manager?'<th>Permissions</th>':''}</tr></thead><tbody>
+ ${ps.map(p=>`<tr><td><b>${e(name(p.id))}</b>${!p.enabled&&!formerProfile(p)?' · disabled':''}</td><td>${e(p.username)}</td><td>${manager?managerPresenceSelect(p):`<span class="chip presence-${agentIsOnline(p.id)?e(p.agent_state):'offline'}">${agentIsOnline(p.id)?e(p.agent_state):'Logged out · Offline'}</span>`}</td><td>${state.cases.filter(c=>c.status==='assigned'&&c.assigned_to===p.id).length}</td><td>${p.max_chats}</td>${manager?`<td>${formerProfile(p)?'<span class="small muted">Historical account</span>':btn('Configure',`configureAgent('${p.id}')`,'alt sm')}</td>`:''}</tr>`).join('')}
+ </tbody></table></div>`;
+}
 function configureAgent(id){const p=state.profiles.find(x=>x.id===id);if(!p)return;el.insertAdjacentHTML('beforeend',`<div class="overlay" id="overlay"><form class="modal" onsubmit="saveAgent(event,'${id}')"><h2>${e(p.display_name)}</h2><p class="muted small">Permissions are verified by the database.</p><label>Maximum simultaneous chats</label><input type="number" id="maxchats" min="1" max="20" value="${p.max_chats}" required><label><input type="checkbox" id="enabled" style="width:auto" ${p.enabled?'checked':''}> Account enabled</label><label><input type="checkbox" id="monitor" style="width:auto" ${p.can_monitor?'checked':''}> Monitor all AI conversations</label><label><input type="checkbox" id="takeover" style="width:auto" ${p.can_takeover?'checked':''}> Take over AI conversations</label><label><input type="checkbox" id="reassign" style="width:auto" ${p.can_reassign?'checked':''}> Reassign conversations</label><div class="actions" style="margin-top:18px"><button type="submit" class="btn">Save settings</button>${btn('Cancel',"document.getElementById('overlay').remove()",'alt')}</div></form></div>`)}
 async function saveAgent(ev,id){ev.preventDefault();const obj={p_id:id,p_enabled:document.getElementById('enabled').checked,p_max_chats:Number(document.getElementById('maxchats').value),p_monitor:document.getElementById('monitor').checked,p_takeover:document.getElementById('takeover').checked,p_reassign:document.getElementById('reassign').checked};document.getElementById('overlay').remove();callRpc('admin_update_agent',obj)}
 async function loadReportCases(){
