@@ -298,6 +298,21 @@
 .resolve-ui .ui-menu .nav-unread[hidden],.resolve-ui .ui-bell i[hidden]{display:none!important}
 .resolve-ui .ui-case-row.has-unread{border-left:4px solid #2380ff!important}
 @media(max-width:640px){.resolve-ui .ui-audio-controls{gap:3px}.resolve-ui .ui-audio-controls button{font-size:10px;padding:6px 7px}}
+
+/* Resolve 012: reliable new-message banners and alert health */
+.resolve-ui .ui-alert-health{display:inline-flex;align-items:center;gap:5px;font-size:10px;color:#15703c;font-weight:800;white-space:nowrap}
+.resolve-ui .ui-alert-health.limited{color:#aa4100}
+#resolve-new-message-banner{position:fixed;right:20px;top:83px;z-index:10050;display:flex;align-items:center;gap:12px;max-width:min(440px,calc(100vw - 28px));background:#fff;border:1px solid #ed9bac;border-left:5px solid #e40032;color:#18243e;box-shadow:0 12px 40px #0f18353c;padding:14px 12px;border-radius:14px;animation:resolve-notice-in .2s ease-out}
+#resolve-new-message-banner .resolve-alert-icon{display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:#ffe9ef;flex:none}
+#resolve-new-message-banner .resolve-alert-text{display:grid;min-width:0;gap:3px;flex:1}
+#resolve-new-message-banner .resolve-alert-text b{font-size:13px}
+#resolve-new-message-banner .resolve-alert-text span{color:#68738a;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#resolve-new-message-banner button{border:0;border-radius:9px;padding:8px 10px;background:#e40032;color:white;font-weight:700}
+#resolve-new-message-banner .resolve-alert-dismiss{background:transparent;color:#64748b;font-size:20px;padding:2px 7px}
+@keyframes resolve-notice-in{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:650px){#resolve-new-message-banner{left:12px;right:12px;top:72px;max-width:none;padding:10px}.resolve-ui .ui-alert-health{display:none}}
+[data-theme="dark"] #resolve-new-message-banner{background:#263448;color:#edf2fb;border-color:#be3957}
+[data-theme="dark"] #resolve-new-message-banner .resolve-alert-text span{color:#b3bfd4}
 </style></head><body><div id="app"></div><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.min.js'"></script><script>
 /* Public project credentials only; the SERVICE_ROLE key must NEVER be placed here. */
 const CONFIG={url:'https://qegoaryhedsttjcnvljz.supabase.co',anon:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFlZ29hcnloZWRzdHRqY252bGp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM3MTU1MzEsImV4cCI6MjEwOTI5MTUzMX0.OQpXIG42O6QgKVC2-Z9-MAoa8hnZlbAexol4LlSrtKw'};
@@ -430,9 +445,9 @@ async function loadInboxCases(){
   if(request===state.inboxFetchSerial)state.inboxLoading=false;
  }
 }
-// BOT-resolved KPI definition: a Field colleague confirmed a BOT-guided fix,
+// Athena-resolved KPI definition: a Field colleague confirmed an Athena-guided fix,
 // and Technical Support subsequently closed that case. It is not a claim of
-// autonomous BOT closure. Use the database's exact count, not the 1,000-row UI cap.
+// autonomous Athena closure. Use the database's exact count, not the 1,000-row UI cap.
 async function loadBotResolvedCount(){
  if(!state.me||state.me.role==='field')return;
  const serial=++state.botResolvedRequest;
@@ -615,6 +630,9 @@ function notificationPreferenceKey(){return 'resolve-chat-sound:'+String(state.m
 function setupAgentAlerts(){
  state.unreadCounts={};state.unreadReady=false;state.unreadError='';state.drafts={};
  state.unreadLastFetch=0;state.unreadLoading=false;state.selectedWasOpened=false;
+ state.unreadReloadQueued=false;state.realtimeStatus='connecting';
+ state.alertedMessageIds=new Set();state.lastNotificationEventAt=0;
+ state.scanCursor=null;state.scanBusy=false;state.scanPrimed=false;
  state.audioReady=!!(state.audioContext&&state.audioContext.state==='running');state.lastSoundAt=0;
  try{state.soundEnabled=localStorage.getItem(notificationPreferenceKey())!=='off'}catch{state.soundEnabled=true}
  updateAlertIndicators();
@@ -644,7 +662,7 @@ async function unlockNotificationAudio(){
 function soundToggleButton(){
  if(!canReceiveMessageAlerts())return '';
  const title=state.soundEnabled?'Mute message alerts':'Enable message alerts';
- return `<span class="ui-audio-controls"><button type="button" class="btn alt sm notification-toggle" title="${title}" aria-pressed="${state.soundEnabled}" onclick="toggleNotificationSound()">${state.soundEnabled?'🔔 Sound on':'🔕 Sound off'}</button><button type="button" class="btn alt sm notification-test" title="Click to enable browser audio and test your message sound" onclick="testNotificationSound()">Test sound</button>${state.unreadError?`<span class="ui-alert-problem" title="${e(state.unreadError)}">⚠ Alerts setup needed</span>`:''}</span>`;
+ return `<span class="ui-audio-controls"><button type="button" class="btn alt sm notification-toggle" title="${title}" aria-pressed="${state.soundEnabled}" onclick="toggleNotificationSound()">${state.soundEnabled?'🔔 Sound on':'🔕 Sound off'}</button><button type="button" class="btn alt sm notification-test" title="Click to enable browser audio and test your message sound" onclick="testNotificationSound()">Test sound</button><span class="ui-alert-health" data-alert-health title="${state.unreadError?e(state.unreadError):'Checking new messages every 12 seconds'}">${state.unreadError?'⚠ Alerts limited':'● Alerts active'}</span></span>`;
 }
 async function toggleNotificationSound(){
  state.soundEnabled=!state.soundEnabled;
@@ -680,6 +698,11 @@ async function playNewMessageSound(force=false){
  }catch(err){console.warn('Notification sound could not play:',err);return false}
 }
 function updateAlertIndicators(){
+ document.querySelectorAll('[data-alert-health]').forEach(n=>{
+  n.textContent=state.unreadError?'⚠ Alerts limited':'● Alerts active';
+  n.classList.toggle('limited',!!state.unreadError);
+  n.title=state.unreadError||'Incoming Field messages checked automatically every 12 seconds';
+ });
  const total=canReceiveMessageAlerts()?unreadTotal():0;
  document.title=total>0?`(${total>99?'99+':total}) ${DEFAULT_TITLE}`:DEFAULT_TITLE;
  document.querySelectorAll('[data-unread-indicator]').forEach(n=>{
@@ -699,25 +722,111 @@ function updateAlertIndicators(){
   }else if(pill)pill.remove();
  });
 }
+// Resolve 012: message notifications that do not depend on successful Realtime delivery.
+function shouldNotifyFieldMessage(m){
+ if(!canReceiveMessageAlerts()||!state.user||m?.author_kind!=='field')return false;
+ if(m.author_id===state.user.id)return false;
+ const c=findCaseById(m.case_id);
+ if(!c)return false;
+ return state.me.role==='manager'
+  ? ['queued','assigned'].includes(c.status)
+  : c.status==='assigned'&&c.assigned_to===state.me.id;
+}
+function showIncomingMessageBanner(caseId, count=1){
+ if(!state.me)return;
+ const c=findCaseById(caseId);
+ const who=c?name(c.field_id):'Field colleague';
+ const subject=c?.subject||'Support request';
+ let toast=document.getElementById('resolve-new-message-banner');
+ if(!toast){toast=document.createElement('div');toast.id='resolve-new-message-banner';toast.setAttribute('role','status');toast.setAttribute('aria-live','polite');document.body.appendChild(toast);}
+ toast.innerHTML=`<div class="resolve-alert-icon">🔔</div><div class="resolve-alert-text"><b>${count>1?count+' new messages':'New message'} from ${e(who)}</b><span>${e(subject)}</span></div><button type="button" class="resolve-alert-open">Open</button><button type="button" class="resolve-alert-dismiss" aria-label="Dismiss alert">×</button>`;
+ toast.querySelector('.resolve-alert-open').onclick=()=>{
+  toast.remove();state.tab='inbox';state.filter='all';state.selected=caseId;void selectCase(caseId);
+ };
+ toast.querySelector('.resolve-alert-dismiss').onclick=()=>toast.remove();
+ clearTimeout(window.resolveMessageBannerTimer);
+ window.resolveMessageBannerTimer=setTimeout(()=>toast.remove(),9000);
+}
+function notifyIncomingFieldMessage(m, origin='realtime'){
+ if(!shouldNotifyFieldMessage(m))return false;
+ const key=String(m.id||'');
+ if(!key||state.alertedMessageIds?.has(key))return false;
+ if(!state.alertedMessageIds)state.alertedMessageIds=new Set();
+ state.alertedMessageIds.add(key);
+ if(state.alertedMessageIds.size>500)state.alertedMessageIds=new Set([...state.alertedMessageIds].slice(-250));
+ const id=m.case_id;
+ state.lastNotificationEventAt=Date.now();
+ state.unreadCounts[id]=unreadFor(id)+1;
+ updateAlertIndicators();
+ showIncomingMessageBanner(id);
+ void playNewMessageSound();
+ // Confirm the exact count as soon as the authoritative SQL RPC is available.
+ if(origin==='realtime')void loadUnreadCounts(true);
+ return true;
+}
+// First request sets a baseline; subsequent requests only fetch newer messages.
+// No historic messages are treated as a newly arrived alert on sign-in.
+async function scanIncomingFieldMessages(){
+ if(!canReceiveMessageAlerts()||!state.user||state.scanBusy)return;
+ state.scanBusy=true;
+ try{
+  if(state.scanCursor===null){
+   const {data,error}=await api().from('messages')
+    .select('id').eq('author_kind','field').order('id',{ascending:false}).limit(1);
+   if(error)throw error;
+   state.scanCursor=Number(data?.[0]?.id||0);
+   state.scanPrimed=true;
+   return;
+  }
+  const {data,error}=await api().from('messages')
+   .select('id,case_id,author_id,author_kind').eq('author_kind','field')
+   .gt('id',state.scanCursor).order('id',{ascending:true}).limit(200);
+  if(error)throw error;
+  for(const message of data||[]){
+   state.scanCursor=Math.max(state.scanCursor,Number(message.id)||0);
+   notifyIncomingFieldMessage(message,'poll');
+  }
+  // Any unread increments are reconciled after the scan, even if Realtime is down.
+  if(data?.length)void loadUnreadCounts(true);
+ }catch(err){
+  console.warn('Notification message watcher error:',err.message||String(err));
+  state.scanPrimed=false;
+ }finally{state.scanBusy=false}
+}
+
 async function loadUnreadCounts(force=false){
  if(!canReceiveMessageAlerts()||!state.user)return;
- if(state.unreadLoading)return;
+ if(state.unreadLoading){if(force)state.unreadReloadQueued=true;return;}
  if(!force&&Date.now()-state.unreadLastFetch<6500)return;
  state.unreadLoading=true;
+ const requestStart=Date.now();
  try{
   const result=await api().rpc('resolve_staff_unread_counts');
   if(result.error)throw result.error;
   const next={};
   for(const row of result.data||[])next[row.case_id]=Math.max(0,Number(row.unread_count)||0);
-  const changed=state.unreadReady&&Object.keys(next).some(k=>(next[k]||0)>(state.unreadCounts[k]||0));
+  const before={...state.unreadCounts};
+  const changed=state.unreadReady&&Object.keys(next).some(k=>(next[k]||0)>(before[k]||0));
   state.unreadCounts=next;state.unreadReady=true;state.unreadError='';state.unreadLastFetch=Date.now();
   updateAlertIndicators();
-  if(changed)void playNewMessageSound();
+  // Play when a background poll finds unseen messages, unless Realtime already
+  // alerted for the same arrival. Never rely on a sound test to prove SQL works.
+  if(changed&&Date.now()-(state.lastNotificationEventAt||0)>10000){
+   state.lastNotificationEventAt=Date.now();
+   void playNewMessageSound();
+   const c=Object.keys(next).find(k=>(next[k]||0)>(before[k]||0));
+   if(c)showIncomingMessageBanner(c,(next[c]||1));
+  }
+
  }catch(err){
   console.warn('Unread notifications query failed:',err);
   state.unreadError='Unread notifications require the Supabase SQL update 011. '+(err.message||'');
   const notice=document.querySelector('[data-unread-error]');if(notice)notice.textContent=state.unreadError;
- }finally{state.unreadLoading=false;}
+  updateAlertIndicators();
+ }finally{
+  state.unreadLoading=false;
+  if(state.unreadReloadQueued){state.unreadReloadQueued=false;setTimeout(()=>void loadUnreadCounts(true),150)}
+ }
 }
 function conversationVisibleToStaff(caseId){
  const c=findCaseById(caseId);
@@ -731,11 +840,11 @@ async function markConversationRead(caseId){
  try{
   const lastVisible=state.messages.reduce((n,m)=>m.author_kind==='field'?Math.max(n,Number(m.id)||0):n,0);
   if(lastVisible<1)return;
+  // Clearing a badge is a local UI action even if server read-tracking is offline.
+  state.unreadCounts[caseId]=0;updateAlertIndicators();
   const r=await api().rpc('resolve_staff_mark_case_read',{p_case_id:caseId,p_visible_message_id:lastVisible});
   if(r.error)throw r.error;
-  state.unreadCounts[caseId]=0;
-  updateAlertIndicators();
- }catch(err){console.warn('Could not mark conversation read:',err)}
+ }catch(err){console.warn('Could not sync conversation read marker:',err.message||String(err))}
 }
 function isChatActuallyVisible(){
  return (state.tab==='inbox'||state.tab==='mycases')
@@ -749,22 +858,25 @@ function scheduleLiveRefresh(){
 }
 function handleIncomingRealtimeMessage(payload){
  if(canReceiveMessageAlerts()&&payload?.new?.author_kind==='field'){
-  // Query the server for exact per-user counts, including off-screen conversations.
+  notifyIncomingFieldMessage(payload.new,'realtime');
   void loadUnreadCounts(true);
  }
  scheduleLiveRefresh();
 }
 // Poll unread counts separately: heavy conversation queries cannot block alerts.
 setInterval(()=>{
- if(canReceiveMessageAlerts()&&state.user&&document.visibilityState==='visible')void loadUnreadCounts();
+ if(canReceiveMessageAlerts()&&state.user)void loadUnreadCounts();
 },15000);
+// Separate, lightweight message watcher: catches missed Realtime events and
+// supplies immediate UI badges when the earlier SQL migration is unavailable.
+setInterval(()=>{if(canReceiveMessageAlerts()&&state.user)void scanIncomingFieldMessages()},12000);
 document.addEventListener('visibilitychange',()=>{
  if(document.visibilityState==='visible'&&canReceiveMessageAlerts()){
-  void loadUnreadCounts(true);scheduleLiveRefresh();
+  void loadUnreadCounts(true);void scanIncomingFieldMessages();scheduleLiveRefresh();
  }
 });
 window.addEventListener('focus',()=>{
- if(canReceiveMessageAlerts()){void loadUnreadCounts(true);scheduleLiveRefresh();}
+ if(canReceiveMessageAlerts()){void loadUnreadCounts(true);void scanIncomingFieldMessages();scheduleLiveRefresh();}
 });
 document.addEventListener('pointerdown',()=>{
  if(canReceiveMessageAlerts()&&state.soundEnabled)void unlockNotificationAudio();
@@ -777,7 +889,7 @@ const api=()=>{if(!state.client)throw Error(window.supabase?'Supabase connection
 const fail=x=>{state.alert=x.message||String(x);render()};
 const showAlert=()=>state.alert?`<div class="notice error" role="alert">${e(state.alert)}</div>`:'';
 const btn=(text,func,cls='')=>`<button class="btn ${cls}" onclick="${func}">${text}</button>`;
-const caseStatusLabel=status=>({ai:'With the BOT',queued:'Queued',assigned:'With an agent',resolved:'Resolved'}[status]||status);
+const caseStatusLabel=status=>({ai:'With Athena',queued:'Queued',assigned:'With an agent',resolved:'Resolved'}[status]||status);
 function home(){
  el.innerHTML=`<section class="entry"><div class="entry-inner">
   <div class="welcome-top"><div class="brand-lockup">${logoMark()}<div class="logo-caption">Resolve<br>Internal support</div></div>${themeButton()}</div>
@@ -785,7 +897,7 @@ function home(){
   <p>Guided troubleshooting for colleagues in the field, with automatic escalation to Technical Support when solutions are exhausted.</p>
   <div class="portals">
    <button class="portal" onclick="login('field')"><span class="porticon">↗</span><b>Field Login</b><span>Describe an issue and complete the guided solutions before automatic escalation.</span></button>
-   <button class="portal" onclick="login('staff')"><span class="porticon">◉</span><b>Call Centre Login</b><span>Monitor live BOT-guided troubleshooting, take over conversations and manage support requests.</span></button>
+   <button class="portal" onclick="login('staff')"><span class="porticon">◉</span><b>Call Centre Login</b><span>Monitor conversations guided by Athena, take over requests and manage Technical Support.</span></button>
   </div>
  </div></section>`;
 }
@@ -819,7 +931,7 @@ document.addEventListener('visibilitychange',()=>{
  if(document.visibilityState==='visible'&&state.me?.role==='agent')void touchAgentPresence();
 });
 window.addEventListener('focus',()=>{if(state.me?.role==='agent')void touchAgentPresence()});
-async function initSession(){const {data,error}=await api().from('profiles').select('*').eq('id',state.user.id).single();if(error||!data?.enabled){await api().auth.signOut();throw Error('Account not authorised or disabled.')}state.me=data;state.portal=data.role==='field'?'field':'staff';if(state.loginType==='field'&&data.role!=='field'||state.loginType==='staff'&&data.role==='field'){await api().auth.signOut();throw Error('Please use the correct login portal for your role.');}if(data.must_change_password){passwordModal();return}setupAgentAlerts();if(state.me.role==='agent')await touchAgentPresence();await refresh(true);subscribe();}
+async function initSession(){const {data,error}=await api().from('profiles').select('*').eq('id',state.user.id).single();if(error||!data?.enabled){await api().auth.signOut();throw Error('Account not authorised or disabled.')}state.me=data;state.portal=data.role==='field'?'field':'staff';if(state.loginType==='field'&&data.role!=='field'||state.loginType==='staff'&&data.role==='field'){await api().auth.signOut();throw Error('Please use the correct login portal for your role.');}if(data.must_change_password){passwordModal();return}setupAgentAlerts();if(state.me.role==='agent')await touchAgentPresence();await refresh(true);subscribe();void scanIncomingFieldMessages();}
 function passwordModal(){el.innerHTML=`<div class="authpage"><form class="authcard" onsubmit="changePassword(event)">
  <div class="login-brand">${logoMark()}${themeButton()}</div><h2 style="margin-top:18px">Set your personal PIN</h2>
  <p class="muted small">Your temporary PIN must be changed before using Resolve. Avoid dates, repeated numbers or sequential PINs.</p>${showAlert()}
@@ -845,9 +957,9 @@ async function refresh(draw=true){try{if(!state.me||state.me.must_change_passwor
  const selectable=state.tab==='inbox'&&state.me?.role!=='field'?liveConversationCases():state.cases;
  if(state.selected&&!selectable.some(x=>x.id===state.selected)){state.selected=null;state.selectedWasOpened=false;}
  if(!state.selected&&selectable.length){state.selected=selectable[0].id;state.selectedWasOpened=false;}
- await loadSelected(false);if(state.tab==='overview'&&(state.overviewMode==='live'||state.overviewCases===null))await loadOverviewCases();if(canReceiveMessageAlerts()){await loadUnreadCounts();if(state.selectedWasOpened&&isChatActuallyVisible()&&state.selected&&unreadFor(state.selected)>0)await markConversationRead(state.selected);}if(draw){const dateInputFocused=(state.tab==='overview'&&document.activeElement?.matches?.('#overviewFrom,#overviewTo'))||(state.tab==='inbox'&&document.activeElement?.matches?.('#inboxFrom,#inboxTo'));if(dateInputFocused)return;render();if(hadFocus){const restored=document.getElementById('chattext');if(restored){restored.focus();try{restored.setSelectionRange(selection[0],selection[1])}catch{}}}}}catch(err){state.alert=err.message;render()}}
+ await loadSelected(false);if(state.tab==='overview'&&(state.overviewMode==='live'||state.overviewCases===null))await loadOverviewCases();if(canReceiveMessageAlerts()){await loadUnreadCounts();}if(draw){const dateInputFocused=(state.tab==='overview'&&document.activeElement?.matches?.('#overviewFrom,#overviewTo'))||(state.tab==='inbox'&&document.activeElement?.matches?.('#inboxFrom,#inboxTo'));if(dateInputFocused)return;render();if(hadFocus){const restored=document.getElementById('chattext');if(restored){restored.focus();try{restored.setSelectionRange(selection[0],selection[1])}catch{}}}}}catch(err){state.alert=err.message;render()}}
 async function loadSelected(draw=true){if(!state.selected){state.messages=[];state.attempts=[];return}const [m,a]=await Promise.all([api().from('messages').select('*').eq('case_id',state.selected).order('created_at'),api().from('step_attempts').select('*').eq('case_id',state.selected)]);if(m.error)throw m.error;if(a.error)throw a.error;state.messages=m.data||[];state.attempts=a.data||[];if(draw)render()}
-function subscribe(){state.channels.forEach(ch=>api().removeChannel(ch));state.channels=[];const ch=api().channel('resolve-refresh-'+state.user.id).on('postgres_changes',{event:'*',schema:'public',table:'cases'},scheduleLiveRefresh).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'},handleIncomingRealtimeMessage).on('postgres_changes',{event:'*',schema:'public',table:'profiles'},scheduleLiveRefresh).subscribe();state.channels=[ch]}
+function subscribe(){state.channels.forEach(ch=>api().removeChannel(ch));state.channels=[];const ch=api().channel('resolve-refresh-'+state.user.id).on('postgres_changes',{event:'*',schema:'public',table:'cases'},scheduleLiveRefresh).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'},handleIncomingRealtimeMessage).on('postgres_changes',{event:'*',schema:'public',table:'profiles'},scheduleLiveRefresh).subscribe(status=>{state.realtimeStatus=status;updateAlertIndicators()});state.channels=[ch]}
 setInterval(()=>{if(state.me&&document.visibilityState==='visible'&&(state.me.role==='agent'||(state.me.role==='manager'&&state.tab==='team')||(state.tab==='overview'&&state.overviewMode==='live')||(state.me?.role==='manager'&&state.tab==='inbox')))scheduleLiveRefresh()},15000);
 async function logout(){
  state.signingOut=true;
@@ -858,6 +970,8 @@ async function logout(){
  }catch(err){console.warn('Could not end agent heartbeat:',err.message||String(err))}
  try{await api().auth.signOut({scope:'local'})}catch(err){console.warn('Sign-out failed:',err.message||String(err))}
  state.channels.forEach(ch=>api().removeChannel(ch));
+ document.getElementById('resolve-new-message-banner')?.remove();
+ state.scanCursor=null;state.scanPrimed=false;state.alertedMessageIds=new Set();
  document.title=DEFAULT_TITLE;
  Object.assign(state,{user:null,me:null,portal:null,selected:null,cases:[],messages:[],alert:'',unreadCounts:{},unreadReady:false,unreadError:'',drafts:{},onlineAgents:[],onlineAgentsReady:false,onlineAgentsError:'',signingOut:false});
  home();
@@ -891,14 +1005,14 @@ function icon(k,n=19){return `<svg aria-hidden="true" viewBox="0 0 24 24" width=
 function initials(s){return String(s||'?').trim().split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase()}
 function greeting(){const h=Number(new Intl.DateTimeFormat('en-GB',{hour:'numeric',hourCycle:'h23',timeZone:'Europe/London'}).format(new Date()));return h<12?'Good morning':h<17?'Good afternoon':'Good evening'}
 function shortTime(d){return d?new Date(d).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/London'}):'—'}
-function prettyStatus(s){return ({ai:'With BOT',queued:'In queue',assigned:'In progress',resolved:'Resolved'}[s]||s)}
+function prettyStatus(s){return ({ai:'With Athena',queued:'In queue',assigned:'In progress',resolved:'Resolved'}[s]||s)}
 function filterCaseSearch(v){state.uiSearch=v.toLowerCase().trim();document.querySelectorAll('.ui-case-row').forEach(n=>n.hidden=!(n.getAttribute('data-search')||'').includes(state.uiSearch))}
 function toggleDatePanel(){state.showDatePanel=!state.showDatePanel;render()}
 function liveKpis(){
  const cs=state.cases,today=ukDateISO(),closed=cs.filter(c=>c.resolved_at&&ukDateISO(new Date(c.resolved_at))===today),periods=closed.map(resolveMs).filter(x=>x!=null&&x>=0);
  const botAmount=state.botResolvedReady?state.botResolvedCount:'—';
- const data=[['In queue',cs.filter(c=>c.status==='queued').length,'chat','rose'],['In progress',cs.filter(c=>c.status==='assigned').length,'headphones','blue'],['Resolved today',closed.length,'check','green'],['Avg. time to resolve',avg(periods),'clock','purple'],['BOT-resolved queries',botAmount,'bot','amber']];
- const explanation='Field colleague reported the issue fixed during BOT troubleshooting; Technical Support then resolved the request.';
+ const data=[['In queue',cs.filter(c=>c.status==='queued').length,'chat','rose'],['In progress',cs.filter(c=>c.status==='assigned').length,'headphones','blue'],['Resolved today',closed.length,'check','green'],['Avg. time to resolve',avg(periods),'clock','purple'],['Resolved with Athena',botAmount,'bot','amber']];
+ const explanation='Field colleague reported the issue fixed with Athena; Technical Support then verified and resolved the request.';
  return `<div class="ui-kpis">${data.map(([label,value,ico,colour])=>`<div class="ui-kpi ${colour}" ${ico==='bot'?`title="${e(state.botResolvedError||explanation)}"`:''}><div class="ui-kpi-icon">${icon(ico,25)}</div><div><small>${e(label)}${ico==='bot'?`<span class="ui-kpi-context">${e(botKpiPeriod())}</span>`:''}</small><strong>${e(value)}</strong></div></div>`).join('')}</div>`;
 }
 function caseSidePanel(){
@@ -908,8 +1022,8 @@ function caseSidePanel(){
  const done=steps.filter(s=>tried.has(s.id)).length;
  const row=(label,value,ico)=>`<div class="ui-detail-row"><span>${icon(ico,16)} ${e(label)}</span><b>${e(value)}</b></div>`;
  return `<aside class="ui-side-detail"><div class="card ui-detail-card"><div class="ui-detail-heading"><h3>Case details</h3><span class="chip ${e(c.status)}">${e(prettyStatus(c.status))}</span></div>
-  ${row('Reference','#'+String(c.id).slice(0,8).toUpperCase(),'info')}${row('Created',fmt(c.created_at),'calendar')}${row('Last activity',shortTime(c.last_activity_at||c.created_at),'clock')}${row('Field colleague',name(c.field_id),'users')}${row('Owner',c.assigned_to?name(c.assigned_to):c.status==='ai'?'BOT':'Unassigned','shield')}</div>
-  <div class="card ui-detail-card"><div class="ui-detail-heading"><h3>BOT progress</h3><span class="small muted">${steps.length?`${done} of ${steps.length}`:'No guide'}</span></div>${steps.length?`<div class="ui-progress-track"><span style="width:${Math.round(done/steps.length*100)}%"></span></div><div class="ui-progress-steps">${steps.map((s,i)=>`<div class="ui-progress-step ${tried.has(s.id)?'done':!tried.has(s.id)&&i===done&&c.status==='ai'?'current':''}"><span class="ui-step-number">${tried.has(s.id)?'✓':i+1}</span><div><b>Step ${i+1}</b><span>${e(s.instructions)}</span></div></div>`).join('')}</div>`:'<p class="muted small">No troubleshooting guide has been linked to this case.</p>'}</div>
+  ${row('Reference','#'+String(c.id).slice(0,8).toUpperCase(),'info')}${row('Created',fmt(c.created_at),'calendar')}${row('Last activity',shortTime(c.last_activity_at||c.created_at),'clock')}${row('Field colleague',name(c.field_id),'users')}${row('Owner',c.assigned_to?name(c.assigned_to):c.status==='ai'?'Athena':'Unassigned','shield')}</div>
+  <div class="card ui-detail-card"><div class="ui-detail-heading"><h3>Athena progress</h3><span class="small muted">${steps.length?`${done} of ${steps.length}`:'No guide'}</span></div>${steps.length?`<div class="ui-progress-track"><span style="width:${Math.round(done/steps.length*100)}%"></span></div><div class="ui-progress-steps">${steps.map((s,i)=>`<div class="ui-progress-step ${tried.has(s.id)?'done':!tried.has(s.id)&&i===done&&c.status==='ai'?'current':''}"><span class="ui-step-number">${tried.has(s.id)?'✓':i+1}</span><div><b>Step ${i+1}</b><span>${e(s.instructions)}</span></div></div>`).join('')}</div>`:'<p class="muted small">No troubleshooting guide has been linked to this case.</p>'}</div>
  </aside>`;
 }
 
@@ -920,7 +1034,7 @@ function header(){
 }
 function nav(){
  const field=state.me.role==='field',manager=state.me.role==='manager';
- const tabs=field?[['conversations','My conversations','chat'],['new','Ask Resolve','plus']]:[['overview','Dashboard','home'],['inbox','Live Conversations','chat'],['mycases','My Conversations','inbox'],['monitor','BOT Activity','bot'],...(manager?[['knowledge','Knowledge Base','book'],['reports','Reports','chart']]:[]),['team','Team & Availability','users'],...(manager?[['accounts','User Management','shield']]:[])];
+ const tabs=field?[['conversations','My conversations','chat'],['new','Ask Athena','plus']]:[['overview','Dashboard','home'],['inbox','Live Conversations','chat'],['mycases','My Conversations','inbox'],['monitor','Athena Activity','bot'],...(manager?[['knowledge','Knowledge Base','book'],['reports','Reports','chart']]:[]),['team','Team & Availability','users'],...(manager?[['accounts','User Management','shield']]:[])];
  return `<aside class="sidebar ui-sidebar"><div class="ui-side-logo"><span class="ui-official-lockup"><img class="ui-verisure-official" src="data:image/png;base64,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" alt="Verisure" onerror="this.style.display='none';this.nextElementSibling.hidden=false"><span class="ui-logo-fallback" hidden><svg class="ui-mark-fallback" aria-hidden="true" width="30" height="30" viewBox="0 0 48 48" fill="none"><path d="M24 3.8c5.1-1.1 7.4 2.4 9 6.2 1.7 3.6 3.3 4.9 7.4 6.1 5.5 1.7 6.6 6 3.8 10.7-2 3.6-4.4 5.3-4.7 9.1-.3 5.5-4.4 8.6-9.5 7.1-3.6-1.1-5.8-1-9.3.2-5.4 1.9-9.7-1.3-9.8-6.8-.1-3.7-1.4-6.6-4.5-9.2C-.4 22 1 17 6.5 15.6c4.5-1.2 6.6-2.7 8.2-6.3 1.7-3.6 4.1-6.5 9.3-5.5Z" fill="currentColor"/><circle cx="24" cy="24" r="9.1" fill="#172337"/><circle cx="24" cy="24" r="7.3" fill="none" stroke="currentColor" stroke-width="1.3"/></svg><b>verisure</b></span></span><span class="ui-logo-rule"></span><strong>Resolve</strong></div><nav class="ui-menu" aria-label="App navigation">${tabs.map(([id,label,ico])=>`<button class="${state.tab===id?'active':''}" onclick="openTab('${id}')">${icon(ico,21)}<span>${e(label)}</span>${['inbox','mycases'].includes(id)&&canReceiveMessageAlerts()?`<em class="nav-unread" data-unread-indicator="${id}" ${unreadTotal()>0?'':'hidden'}>${unreadTotal()>99?'99+':unreadTotal()}</em>`:''}</button>`).join('')}</nav><div class="ui-sidebar-decoration"><small>RESOLVE · TECHNICAL SUPPORT</small></div></aside>`;
 }
 async function openTab(id){
@@ -960,14 +1074,14 @@ function showSuggestion(){
 }
 function newRequest(){
  const wait=requestWaitMs();
- return `<div class="pagehead"><div><h2>Ask Resolve</h2></div></div>
+ return `<div class="pagehead"><div><h2>Ask Athena</h2></div></div>
  <div class="card" style="max-width:720px">
  <div id="requestCountdown" class="cooldown-notice ${wait===0?'ready':''}" role="status" aria-live="polite">${wait?`You can open your next request in ${countdownText(wait)}. Continue chatting in your existing request if needed.`:'You can now open a new request.'}</div>
  <form onsubmit="createCase(event)">
  <label>What is the error or question?</label><textarea id="subject" required maxlength="300" oninput="showSuggestion()" placeholder="For example: Starkey isn't arming after replacement"></textarea>
  <label>Matched troubleshooting guide</label><select id="article" data-manual="0" onchange="this.dataset.manual='1'"><option value="">No approved guide matched — automatic routing</option>${state.articles.filter(a=>a.active&&!a.deleted_at).map(a=>`<option value="${a.id}">${e(a.title)}</option>`).join('')}</select>
  <div id="matchHint" class="highlightnote">Type your question to get a guide suggestion.</div>
- <p class="muted small">Resolve suggests approved solutions; a Technical Support agent or manager must verify and close the conversation. If a solution works, Technical Support will check it before closure.</p>
+ <p class="muted small">Athena guides you through approved solutions. A Technical Support agent or manager will verify and close your request. If a solution works, Technical Support will check it before closure.</p>
  <p class="muted small">Do not share customer passwords, alarm codes or unnecessary personal data.</p>
  <div style="height:12px"></div><button class="btn" id="requestSubmit" type="submit" ${wait?'disabled':''}>${wait?'New request available shortly':'Start conversation →'}</button>
  </form></div>`;
@@ -998,6 +1112,13 @@ function caseList(){
  }).join(''):'<p class="muted small" style="padding:12px">No conversations found.</p>'}</div></section>`;
 }
 async function selectCase(id){state.selected=id;state.selectedWasOpened=true;state.chatSubview='conversation';await loadSelected(false);if(canReceiveMessageAlerts())await markConversationRead(id);render()}
+function systemMessageSender(m){
+ const body=String(m?.body||'');
+ // Athena guidance is stored as a system-kind message in Resolve. Other
+ // system-kind messages (assignment, human closure, reassignments) are not Athena.
+ return /^(Hi, I(?:’|')m Athena\b|Guided troubleshooting started\b|No matching guide\b|Step outcome:|The field colleague reported that the issue is fixed\b|All troubleshooting steps were attempted\b|All available troubleshooting steps were attempted\b)/i.test(body)
+  ? 'Athena' : 'System';
+}
 function currentStep(c){if(!c||c.status!=='ai')return null;const steps=state.steps.filter(s=>s.article_id===c.article_id);return steps.find(s=>!state.attempts.some(a=>a.step_id===s.id))||null}
 function chatPanel(){
  const c=findCaseById(state.selected);
@@ -1006,19 +1127,19 @@ function chatPanel(){
  const canTake=!isField&&c.status!=='resolved'&&c.assigned_to!==state.me.id&&(state.me.role==='manager'||state.me.can_takeover)&&c.status!=='assigned';
  const canResolve=(state.me.role==='agent'&&c.status==='assigned'&&c.assigned_to===state.me.id)||(state.me.role==='manager'&&['queued','assigned'].includes(c.status));
  const canReturn=!isField&&c.status==='assigned'&&(state.me.role==='manager'||c.assigned_to===state.me.id)&&c.article_id&&step;
- const actions=`${canTake?btn('Take over',`takeover('${c.id}')`,'alt sm'):''}${canReturn?btn('Return to BOT',`returnToAI('${c.id}')`,'alt sm'):''}${!isField&&state.me.role==='manager'&&c.status!=='resolved'?btn('Reassign',`reassignPrompt('${c.id}')`,'alt sm'):''}${canResolve?btn('✓ Resolve',`resolvePrompt('${c.id}')`,'sm ui-resolve'):''}`;
+ const actions=`${canTake?btn('Take over',`takeover('${c.id}')`,'alt sm'):''}${canReturn?btn('Return to Athena',`returnToAI('${c.id}')`,'alt sm'):''}${!isField&&state.me.role==='manager'&&c.status!=='resolved'?btn('Reassign',`reassignPrompt('${c.id}')`,'alt sm'):''}${canResolve?btn('✓ Resolve',`resolvePrompt('${c.id}')`,'sm ui-resolve'):''}`;
  const tab=state.chatSubview||'conversation';
- const msgs=state.messages.map(m=>{const system=m.author_kind==='system',own=m.author_id===state.me.id,person=system?'BOT':own?'You':name(m.author_id);return `<div class="ui-message ${system?'bot':''} ${own?'own':''}"><span class="ui-msg-avatar">${system?icon('bot',19):e(initials(person))}</span><div class="ui-message-group"><div class="ui-msg-meta"><b>${e(person)}</b><time>${e(shortTime(m.created_at))}</time></div><div class="bubble ${system?'system':''} ${own?'own':''}">${e(m.body)}</div></div></div>`}).join('');
- const guide=`${c.status==='ai'&&step?`<div class="ai-banner"><strong> ${icon('bot',16)} Resolve BOT · Step ${done+1} of ${steps.length}</strong><div class="step-progress"><span style="width:${Math.round(done/Math.max(steps.length,1)*100)}%"></span></div><p>${e(step.instructions)}</p>${isField?`<div class="actions" style="margin-top:12px">${btn('✓ Issue appears fixed',`tryStep('${c.id}','${step.id}',true)`,'sm')}${btn('Still not working',`tryStep('${c.id}','${step.id}',false)`,'alt sm')}</div>`:''}</div>`:''}${isField&&c.status==='ai'?`<div class="notice small">${step?'Complete every BOT step before being connected to Technical Support.':'Checking the available troubleshooting steps.'}</div>`:''}${c.status==='queued'?`<div class="notice small">${c.field_reports_fixed_at?'Field reported a fix; Technical Support will verify it.':'Waiting for the next available agent.'} Queue wait: ${duration(queueMs(c))}</div>`:''}`;
- const activity=`<div class="ui-detail-tab"><h3>Conversation activity</h3><div>Created: ${e(fmt(c.created_at))}</div>${c.queued_at?`<div>Queued: ${e(fmt(c.queued_at))}</div>`:''}${c.assigned_at?`<div>Assigned: ${e(fmt(c.assigned_at))}</div>`:''}${c.resolved_at?`<div>Resolved: ${e(fmt(c.resolved_at))}</div>`:''}<div>BOT steps attempted: ${state.attempts.length}</div></div>`;
+ const msgs=state.messages.map(m=>{const system=m.author_kind==='system',athena=system&&systemMessageSender(m)==='Athena',own=m.author_id===state.me.id,person=system?systemMessageSender(m):own?'You':name(m.author_id);return `<div class="ui-message ${athena?'bot':''} ${own?'own':''}"><span class="ui-msg-avatar">${athena?icon('bot',19):e(initials(person))}</span><div class="ui-message-group"><div class="ui-msg-meta"><b>${e(person)}</b><time>${e(shortTime(m.created_at))}</time></div><div class="bubble ${system?'system':''} ${own?'own':''}">${e(m.body)}</div></div></div>`}).join('');
+ const guide=`${c.status==='ai'&&step?`<div class="ai-banner"><strong> ${icon('bot',16)} Athena · Step ${done+1} of ${steps.length}</strong><div class="step-progress"><span style="width:${Math.round(done/Math.max(steps.length,1)*100)}%"></span></div><p>${e(step.instructions)}</p>${isField?`<div class="actions" style="margin-top:12px">${btn('✓ Issue appears fixed',`tryStep('${c.id}','${step.id}',true)`,'sm')}${btn('Still not working',`tryStep('${c.id}','${step.id}',false)`,'alt sm')}</div>`:''}</div>`:''}${isField&&c.status==='ai'?`<div class="notice small">${step?'Complete every troubleshooting step with Athena before being connected to Technical Support.':'Checking the available troubleshooting steps.'}</div>`:''}${c.status==='queued'?`<div class="notice small">${c.field_reports_fixed_at?'Field reported a fix; Technical Support will verify it.':'Waiting for the next available agent.'} Queue wait: ${duration(queueMs(c))}</div>`:''}`;
+ const activity=`<div class="ui-detail-tab"><h3>Conversation activity</h3><div>Created: ${e(fmt(c.created_at))}</div>${c.queued_at?`<div>Queued: ${e(fmt(c.queued_at))}</div>`:''}${c.assigned_at?`<div>Assigned: ${e(fmt(c.assigned_at))}</div>`:''}${c.resolved_at?`<div>Resolved: ${e(fmt(c.resolved_at))}</div>`:''}<div>Troubleshooting steps attempted: ${state.attempts.length}</div></div>`;
  const details=`<div class="ui-detail-tab"><h3>Conversation details</h3><div>Subject: ${e(c.subject)}</div><div>Field colleague: ${e(name(c.field_id))}</div><div>Assigned agent: ${e(name(c.assigned_to))}</div><div>Status: ${e(prettyStatus(c.status))}</div>${c.resolution?`<div>Resolution: ${e(c.resolution)}</div>`:''}</div>`;
  return `<section class="card chat ui-chat"><div class="chat-head ui-chat-header"><div class="ui-person"><span class="ui-case-avatar">${e(initials(name(c.field_id)))}</span><span><b>${e(name(c.field_id))}</b><small>#${e(String(c.id).slice(0,8).toUpperCase())} · ${e(c.subject)}</small></span></div><div class="actions">${actions}</div></div><div class="ui-chat-tabs">${[['conversation','Conversation'],['activity','Activity'],['details','Details']].map(([id,label])=>`<button class="${tab===id?'active':''}" onclick="state.chatSubview='${id}';render()">${label}</button>`).join('')}</div>
- ${tab==='conversation'?`<div class="messages ui-messages" id="messages">${msgs||'<p class="muted small">No messages yet.</p>'}</div>${guide}<div class="ui-composer">${canReply?`<form class="compose" onsubmit="sendMessage(event)"><input id="chattext" placeholder="Type a message…" maxlength="10000" required aria-label="Message" value="${e(state.drafts[c.id]||'')}" oninput="rememberDraft(this.value)"><button type="submit" class="btn ui-send" aria-label="Send message">${icon('send',20)}</button></form>`:`<p class="muted small">${c.status==='resolved'?'This conversation is resolved.':c.status==='ai'?'The BOT is guiding this conversation.':'Waiting or monitoring only.'}</p>`}</div>`:tab==='activity'?activity:details}</section>`;
+ ${tab==='conversation'?`<div class="messages ui-messages" id="messages">${msgs||'<p class="muted small">No messages yet.</p>'}</div>${guide}<div class="ui-composer">${canReply?`<form class="compose" onsubmit="sendMessage(event)"><input id="chattext" placeholder="Type a message…" maxlength="10000" required aria-label="Message" value="${e(state.drafts[c.id]||'')}" oninput="rememberDraft(this.value)"><button type="submit" class="btn ui-send" aria-label="Send message">${icon('send',20)}</button></form>`:`<p class="muted small">${c.status==='resolved'?'This conversation is resolved.':c.status==='ai'?'Athena is guiding this conversation.':'Waiting or monitoring only.'}</p>`}</div>`:tab==='activity'?activity:details}</section>`;
 }
 function inbox(){
  const field=state.me.role==='field',mine=state.tab==='mycases';
  if(field)return `<div class="ui-field-page"><div class="pagehead"><h2>My support requests</h2>${btn('New request',"state.tab='new';render()",'sm')}</div><div class="ui-live-grid ui-field-grid">${caseList()}${chatPanel()}</div></div>`;
- const statuses=[['all','All'],['queued','In queue'],['assigned','In progress'],['ai','With BOT'],['resolved','Resolved']];
+ const statuses=[['all','All'],['queued','In queue'],['assigned','In progress'],['ai','With Athena'],['resolved','Resolved']];
  return `<div class="ui-live-page">${liveKpis()}<div class="ui-live-heading"><div class="ui-page-title">${icon('chat',29)}<h2>${mine?'My Conversations':'Live Conversations'}</h2></div><div class="ui-live-controls"><div class="ui-status-tabs" aria-label="Conversation status">${statuses.map(([id,label])=>`<button class="${state.filter===id?'active':''}" onclick="state.filter='${id}';render()">${label}</button>`).join('')}</div>${mine?'':`<div class="ui-date-tools"><select aria-label="Select date period" onchange="chooseInboxPreset(this.value)">${[['all','All dates'],['today','Today'],['7d','Last 7 Days'],['30d','Last 30 Days'],['custom','Custom dates']].map(([v,t])=>`<option value="${v}" ${state.inboxMode===v?'selected':''}>${t}</option>`).join('')}</select><button title="Advanced date filters" aria-label="Advanced date filters" onclick="toggleDatePanel()">${icon('filter',19)}</button><button title="Refresh conversations" aria-label="Refresh conversations" onclick="refreshInbox()">${icon('refresh',19)}</button></div>`}</div></div>
  ${!mine&&state.showDatePanel?`<div class="ui-custom-date">${inboxFilterHTML()}</div>`:''}${state.inboxError?`<p class="date-error">${e(state.inboxError)}</p>`:''}<div class="ui-live-grid">${caseList()}${chatPanel()}${caseSidePanel()}</div></div>`;
 }
@@ -1109,7 +1230,7 @@ async function submitReassignment(ev,id){
 }
 
 
-function monitorPage(){if(state.me.role==='field')return '';const active=state.cases.filter(c=>c.status==='ai');const queues=state.cases.filter(c=>c.status==='queued');return `<div class="pagehead"><div><h2>BOT conversation monitoring</h2></div>${btn('Refresh','refresh()','alt sm')}</div><div class="cards"><div class="card"><span class="muted small">With the BOT</span><div class="metric">${active.length}</div></div><div class="card"><span class="muted small">Awaiting human</span><div class="metric">${queues.length}</div></div><div class="card"><span class="muted small">Agent-connected</span><div class="metric">${state.cases.filter(c=>c.status==='assigned').length}</div></div></div><div class="card"><h3>Active BOT conversations</h3>${active.map(c=>{const steps=state.steps.filter(x=>x.article_id===c.article_id);return `<button class="caseitem" style="width:100%;text-align:left" onclick="state.tab='inbox';state.selected='${c.id}';loadSelected()"><b>${e(c.subject)}</b><div class="small muted">${e(name(c.field_id))} · ${fmt(c.created_at)} · ${steps.length} configured steps · View conversation →</div></button>`}).join('')||'<p class="muted">There are no active BOT conversations.</p>'}</div><div class="card" style="margin-top:12px"><h3>Waiting for a human agent</h3>${queues.map(c=>`<button class="caseitem" style="width:100%;text-align:left" onclick="state.tab='inbox';state.selected='${c.id}';loadSelected()"><b>${e(c.subject)}</b> · ${duration(queueMs(c))}</button>`).join('')||'<p class="muted">The queue is empty.</p>'}</div>`}
+function monitorPage(){if(state.me.role==='field')return '';const active=state.cases.filter(c=>c.status==='ai');const queues=state.cases.filter(c=>c.status==='queued');return `<div class="pagehead"><div><h2>Athena monitoring</h2></div>${btn('Refresh','refresh()','alt sm')}</div><div class="cards"><div class="card"><span class="muted small">With Athena</span><div class="metric">${active.length}</div></div><div class="card"><span class="muted small">Awaiting human</span><div class="metric">${queues.length}</div></div><div class="card"><span class="muted small">Agent-connected</span><div class="metric">${state.cases.filter(c=>c.status==='assigned').length}</div></div></div><div class="card"><h3>Conversations with Athena</h3>${active.map(c=>{const steps=state.steps.filter(x=>x.article_id===c.article_id);return `<button class="caseitem" style="width:100%;text-align:left" onclick="state.tab='inbox';state.selected='${c.id}';loadSelected()"><b>${e(c.subject)}</b><div class="small muted">${e(name(c.field_id))} · ${fmt(c.created_at)} · ${steps.length} configured steps · View conversation →</div></button>`}).join('')||'<p class="muted">There are no active Athena conversations.</p>'}</div><div class="card" style="margin-top:12px"><h3>Waiting for a human agent</h3>${queues.map(c=>`<button class="caseitem" style="width:100%;text-align:left" onclick="state.tab='inbox';state.selected='${c.id}';loadSelected()"><b>${e(c.subject)}</b> · ${duration(queueMs(c))}</button>`).join('')||'<p class="muted">The queue is empty.</p>'}</div>`}
 function knowledgePage(){if(state.me.role!=='manager')return '<div class="notice">Manager access required.</div>';return `<div class="pagehead"><div><h2>Errors & solutions</h2></div>${btn('+ Add troubleshooting guide','editKnowledge()','sm')}</div><div class="kb-grid">${state.articles.filter(a=>!a.deleted_at).map(a=>{const steps=state.steps.filter(x=>x.article_id===a.id);return `<div class="card kb-entry"><div class="actions"><span class="chip ${a.active?'assigned':'resolved'}">${a.active?'Active':'Disabled'}</span></div><h3>${e(a.title)}</h3><div class="small muted">Keywords: ${e(a.keywords||'—')}</div><ol>${steps.map(x=>`<li>${e(x.instructions)}</li>`).join('')}</ol><div class="actions">${btn('Edit steps',`editKnowledge('${a.id}')`,'alt sm')}${btn(a.active?'Disable':'Enable',`toggleKnowledge('${a.id}',${!a.active})`,'soft sm')}${btn('Delete',`deleteKnowledge('${a.id}')`,'danger sm')}</div></div>`}).join('')}</div>`}
 function kbStepFields(steps){
  const count=Math.max(5,steps.length);
@@ -1225,11 +1346,11 @@ function overview(){
  </section>
  <p class="overview-count-note">${live?'Showing only requests created today — yesterday’s resolved conversations are not included.':'Showing only requests created within the selected dates.'} ${countsReady?`<b>${cs.length}</b> total request${cs.length===1?'':'s'} in this period.`:''} Earlier open requests remain accessible in Live conversations.</p>
  <div class="cards overview-five-cards">
-  <div class="card"><span class="muted small">With the BOT</span><div class="metric">${displayCount(cs.filter(c=>c.status==='ai').length)}</div></div>
+  <div class="card"><span class="muted small">With Athena</span><div class="metric">${displayCount(cs.filter(c=>c.status==='ai').length)}</div></div>
   <div class="card"><span class="muted small">Waiting in queue</span><div class="metric">${displayCount(waiting.length)}</div></div>
   <div class="card"><span class="muted small">With an agent</span><div class="metric">${displayCount(cs.filter(c=>c.status==='assigned').length)}</div></div>
   <div class="card"><span class="muted small">Resolved</span><div class="metric">${displayCount(cs.filter(c=>c.status==='resolved').length)}</div></div>
-  <div class="card" title="Field colleague reported a BOT-guided fix and Technical Support later resolved the request"><span class="muted small">BOT-resolved queries</span><div class="metric">${displayCount(cs.filter(c=>c.status==='resolved'&&c.field_reports_fixed_at).length)}</div></div>
+  <div class="card" title="Field colleague reported an Athena-guided fix and Technical Support later resolved the request"><span class="muted small">Resolved with Athena</span><div class="metric">${displayCount(cs.filter(c=>c.status==='resolved'&&c.field_reports_fixed_at).length)}</div></div>
  </div>
  <div class="grid2">
   <div class="card"><h3>Agent availability <span class="small muted" style="font-weight:normal">(current)</span></h3>${capacityRows||'<p class="muted small">No agents are currently Available or Busy.</p>'}</div>
@@ -1268,7 +1389,7 @@ function team(){
  ${ps.map(p=>`<tr><td><b>${e(name(p.id))}</b>${!p.enabled&&!formerProfile(p)?' · disabled':''}</td><td>${e(p.username)}</td><td>${manager?managerPresenceSelect(p):`<span class="chip presence-${agentIsOnline(p.id)?e(p.agent_state):'offline'}">${agentIsOnline(p.id)?e(p.agent_state):'Logged out · Offline'}</span>`}</td><td>${state.cases.filter(c=>c.status==='assigned'&&c.assigned_to===p.id).length}</td><td>${p.max_chats}</td>${manager?`<td>${formerProfile(p)?'<span class="small muted">Historical account</span>':btn('Configure',`configureAgent('${p.id}')`,'alt sm')}</td>`:''}</tr>`).join('')}
  </tbody></table></div>`;
 }
-function configureAgent(id){const p=state.profiles.find(x=>x.id===id);if(!p)return;el.insertAdjacentHTML('beforeend',`<div class="overlay" id="overlay"><form class="modal" onsubmit="saveAgent(event,'${id}')"><h2>${e(p.display_name)}</h2><label>Maximum simultaneous chats</label><input type="number" id="maxchats" min="1" max="20" value="${p.max_chats}" required><label><input type="checkbox" id="enabled" style="width:auto" ${p.enabled?'checked':''}> Account enabled</label><label><input type="checkbox" id="monitor" style="width:auto" ${p.can_monitor?'checked':''}> Monitor all BOT conversations</label><label><input type="checkbox" id="takeover" style="width:auto" ${p.can_takeover?'checked':''}> Take over BOT conversations</label><label><input type="checkbox" id="reassign" style="width:auto" ${p.can_reassign?'checked':''}> Reassign conversations</label><div class="actions" style="margin-top:18px"><button type="submit" class="btn">Save settings</button>${btn('Cancel',"document.getElementById('overlay').remove()",'alt')}</div></form></div>`)}
+function configureAgent(id){const p=state.profiles.find(x=>x.id===id);if(!p)return;el.insertAdjacentHTML('beforeend',`<div class="overlay" id="overlay"><form class="modal" onsubmit="saveAgent(event,'${id}')"><h2>${e(p.display_name)}</h2><label>Maximum simultaneous chats</label><input type="number" id="maxchats" min="1" max="20" value="${p.max_chats}" required><label><input type="checkbox" id="enabled" style="width:auto" ${p.enabled?'checked':''}> Account enabled</label><label><input type="checkbox" id="monitor" style="width:auto" ${p.can_monitor?'checked':''}> Monitor all Athena conversations</label><label><input type="checkbox" id="takeover" style="width:auto" ${p.can_takeover?'checked':''}> Take over Athena conversations</label><label><input type="checkbox" id="reassign" style="width:auto" ${p.can_reassign?'checked':''}> Reassign conversations</label><div class="actions" style="margin-top:18px"><button type="submit" class="btn">Save settings</button>${btn('Cancel',"document.getElementById('overlay').remove()",'alt')}</div></form></div>`)}
 async function saveAgent(ev,id){ev.preventDefault();const obj={p_id:id,p_enabled:document.getElementById('enabled').checked,p_max_chats:Number(document.getElementById('maxchats').value),p_monitor:document.getElementById('monitor').checked,p_takeover:document.getElementById('takeover').checked,p_reassign:document.getElementById('reassign').checked};document.getElementById('overlay').remove();callRpc('admin_update_agent',obj)}
 async function loadReportCases(){
  if(state.me?.role!=='manager')return;
@@ -1357,7 +1478,7 @@ async function exportTranscripts(){
   }
   const map=new Map(cases.map(c=>[c.id,c]));
   const rows=[['Case ID','Issue','Case created','Case status','Message ID','Timestamp','Sender','Sender type','Message'],
-  ...messages.map(m=>[m.case_id,map.get(m.case_id)?.subject,map.get(m.case_id)?.created_at,caseStatusLabel(map.get(m.case_id)?.status),m.id,m.created_at,m.author_id?name(m.author_id):'Resolve BOT',m.author_kind,m.body])];
+  ...messages.map(m=>[m.case_id,map.get(m.case_id)?.subject,map.get(m.case_id)?.created_at,caseStatusLabel(map.get(m.case_id)?.status),m.id,m.created_at,m.author_id?name(m.author_id):systemMessageSender(m),m.author_kind,m.body])];
   downloadCsv('resolve-full-transcripts-'+reportFileSuffix()+'.csv',rows);
  }catch(err){fail(err)}
 }
