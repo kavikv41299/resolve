@@ -290,6 +290,14 @@
 .resolve-ui .overview-five-cards{grid-template-columns:repeat(5,minmax(0,1fr))}
 @media(max-width:1000px){.resolve-ui .overview-five-cards{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:620px){.resolve-ui .overview-five-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Resolve 011 - new message indicators and audible-alert controls */
+.resolve-ui .ui-audio-controls{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.resolve-ui .notification-test{white-space:nowrap}
+.resolve-ui .ui-alert-problem{font-size:10px;color:#d70b34;font-weight:750;white-space:nowrap}
+.resolve-ui .ui-menu .nav-unread[hidden],.resolve-ui .ui-bell i[hidden]{display:none!important}
+.resolve-ui .ui-case-row.has-unread{border-left:4px solid #2380ff!important}
+@media(max-width:640px){.resolve-ui .ui-audio-controls{gap:3px}.resolve-ui .ui-audio-controls button{font-size:10px;padding:6px 7px}}
 </style></head><body><div id="app"></div><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.min.js'"></script><script>
 /* Public project credentials only; the SERVICE_ROLE key must NEVER be placed here. */
 const CONFIG={url:'https://qegoaryhedsttjcnvljz.supabase.co',anon:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFlZ29hcnloZWRzdHRqY252bGp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM3MTU1MzEsImV4cCI6MjEwOTI5MTUzMX0.OQpXIG42O6QgKVC2-Z9-MAoa8hnZlbAexol4LlSrtKw'};
@@ -596,100 +604,173 @@ function reportBounds(){
 }
 function reportLabel(){const b=reportBounds();return b.from?`${b.from} to ${b.to}`:'all-dates'}
 
-// Live, per-agent unread counters are stored in Supabase (migration 007).
-// A sound is triggered only when the unread total INCREASES after initial load.
+// Resolve 011: per-user unread Field-message tracking for agents and managers.
+// The server is authoritative; indicator refreshes do not rewrite the message composer.
+const DEFAULT_TITLE='Resolve | Field and Call Centre';
+const canReceiveMessageAlerts=()=>state.me?.role==='agent'||state.me?.role==='manager';
 function unreadFor(caseId){return Math.max(0, Number(state.unreadCounts[caseId]||0))}
 function unreadTotal(){return Object.values(state.unreadCounts).reduce((sum,n)=>sum+Math.max(0,Number(n)||0),0)}
 function unreadConversations(){return Object.values(state.unreadCounts).filter(n=>Number(n)>0).length}
 function notificationPreferenceKey(){return 'resolve-chat-sound:'+String(state.me?.id||'default')}
 function setupAgentAlerts(){
  state.unreadCounts={};state.unreadReady=false;state.unreadError='';state.drafts={};
+ state.unreadLastFetch=0;state.unreadLoading=false;state.selectedWasOpened=false;
+ state.audioReady=!!(state.audioContext&&state.audioContext.state==='running');state.lastSoundAt=0;
  try{state.soundEnabled=localStorage.getItem(notificationPreferenceKey())!=='off'}catch{state.soundEnabled=true}
+ updateAlertIndicators();
 }
-function unlockNotificationAudio(){
- if(!state.soundEnabled)return;
+// Prime Web Audio synchronously on the login click, before the first await.
+// This preserves the browser's user-gesture permission for later alerts.
+function primeAudioOnLogin(){
  try{
   const Audio=window.AudioContext||window.webkitAudioContext;
   if(!Audio)return;
   if(!state.audioContext)state.audioContext=new Audio();
-  if(state.audioContext.state==='suspended')state.audioContext.resume().catch(()=>{});
- }catch(err){console.warn('Browser audio unavailable:',err)}
+  if(state.audioContext.state==='suspended')void state.audioContext.resume().catch(()=>{});
+ }catch(err){console.warn('Audio permission unavailable:',err)}
+}
+async function unlockNotificationAudio(){
+ if(!state.soundEnabled||!canReceiveMessageAlerts())return false;
+ try{
+  const Audio=window.AudioContext||window.webkitAudioContext;
+  if(!Audio)return false;
+  if(!state.audioContext)state.audioContext=new Audio();
+  const ctx=state.audioContext;
+  if(ctx.state==='suspended')await ctx.resume();
+  state.audioReady=ctx.state==='running';
+  return state.audioReady;
+ }catch(err){console.warn('Browser audio unavailable:',err);state.audioReady=false;return false}
 }
 function soundToggleButton(){
- if(state.me?.role!=='agent')return '';
- return `<button type="button" class="btn alt sm notification-toggle" title="Turn ${state.soundEnabled?'off':'on'} new-message sound" aria-pressed="${state.soundEnabled}" onclick="toggleNotificationSound()">${state.soundEnabled?'🔔 Sound on':'🔕 Sound off'}</button>`;
+ if(!canReceiveMessageAlerts())return '';
+ const title=state.soundEnabled?'Mute message alerts':'Enable message alerts';
+ return `<span class="ui-audio-controls"><button type="button" class="btn alt sm notification-toggle" title="${title}" aria-pressed="${state.soundEnabled}" onclick="toggleNotificationSound()">${state.soundEnabled?'🔔 Sound on':'🔕 Sound off'}</button><button type="button" class="btn alt sm notification-test" title="Click to enable browser audio and test your message sound" onclick="testNotificationSound()">Test sound</button>${state.unreadError?`<span class="ui-alert-problem" title="${e(state.unreadError)}">⚠ Alerts setup needed</span>`:''}</span>`;
 }
-function toggleNotificationSound(){
+async function toggleNotificationSound(){
  state.soundEnabled=!state.soundEnabled;
  try{localStorage.setItem(notificationPreferenceKey(),state.soundEnabled?'on':'off')}catch{}
- if(state.soundEnabled)unlockNotificationAudio();
+ if(state.soundEnabled)await playNewMessageSound(true);
  render();
 }
-function playNewMessageSound(){
- if(!state.soundEnabled||state.me?.role!=='agent')return;
- const time=Date.now();if(time-state.lastSoundAt<1200)return;
- state.lastSoundAt=time;
+async function testNotificationSound(){
+ state.soundEnabled=true;
+ try{localStorage.setItem(notificationPreferenceKey(),'on')}catch{}
+ const success=await playNewMessageSound(true);
+ if(!success){state.alert='Browser sound is blocked. Click the Test sound button again, check the tab is not muted and allow sound for this website.';}
+ else state.alert='';
+ render();
+}
+async function playNewMessageSound(force=false){
+ if(!state.soundEnabled||!canReceiveMessageAlerts())return false;
+ const time=Date.now();if(!force&&time-state.lastSoundAt<1200)return false;
  try{
-  unlockNotificationAudio();const a=state.audioContext;
-  if(!a||a.state!=='running')return; // Browsers may require a user click to enable sound.
-  const start=a.currentTime+0.025;
-  for(const [offset,frequency] of [[0,700],[0.14,940]]){
-   const tone=a.createOscillator(),volume=a.createGain();
+  if(!(await unlockNotificationAudio()))return false;
+  const ctx=state.audioContext, start=ctx.currentTime+0.025;
+  for(const [offset,frequency] of [[0,740],[0.16,990]]){
+   const tone=ctx.createOscillator(),volume=ctx.createGain();
    tone.type='sine';tone.frequency.value=frequency;
    volume.gain.setValueAtTime(0.0001,start+offset);
-   volume.gain.exponentialRampToValueAtTime(0.10,start+offset+0.015);
-   volume.gain.exponentialRampToValueAtTime(0.0001,start+offset+0.14);
-   tone.connect(volume);volume.connect(a.destination);
-   tone.start(start+offset);tone.stop(start+offset+0.16);
+   volume.gain.exponentialRampToValueAtTime(0.13,start+offset+0.015);
+   volume.gain.exponentialRampToValueAtTime(0.0001,start+offset+0.16);
+   tone.connect(volume);volume.connect(ctx.destination);
+   tone.start(start+offset);tone.stop(start+offset+0.18);
   }
- }catch(err){console.warn('Notification sound could not play:',err)}
+  state.lastSoundAt=time;
+  return true;
+ }catch(err){console.warn('Notification sound could not play:',err);return false}
 }
-async function loadUnreadCounts(){
- if(state.me?.role!=='agent')return;
+function updateAlertIndicators(){
+ const total=canReceiveMessageAlerts()?unreadTotal():0;
+ document.title=total>0?`(${total>99?'99+':total}) ${DEFAULT_TITLE}`:DEFAULT_TITLE;
+ document.querySelectorAll('[data-unread-indicator]').forEach(n=>{
+  let count=total;
+  if(n.dataset.unreadIndicator==='mycases'&&state.me?.role==='agent')count=total;
+  n.hidden=count===0;
+  n.textContent=count>99?'99+':String(count);
+ });
+ document.querySelectorAll('[data-unread-case]').forEach(row=>{
+  const caseId=row.dataset.unreadCase,count=unreadFor(caseId);
+  row.classList.toggle('has-unread',count>0);
+  const tail=row.querySelector('.ui-case-tail');if(!tail)return;
+  let pill=tail.querySelector('.ui-unread');
+  if(count>0){
+   if(!pill){pill=document.createElement('em');pill.className='ui-unread';tail.appendChild(pill);}
+   pill.textContent=count>99?'99+':String(count);
+  }else if(pill)pill.remove();
+ });
+}
+async function loadUnreadCounts(force=false){
+ if(!canReceiveMessageAlerts()||!state.user)return;
+ if(state.unreadLoading)return;
+ if(!force&&Date.now()-state.unreadLastFetch<6500)return;
+ state.unreadLoading=true;
  try{
-  const result=await api().rpc('agent_unread_counts');
+  const result=await api().rpc('resolve_staff_unread_counts');
   if(result.error)throw result.error;
   const next={};
   for(const row of result.data||[])next[row.case_id]=Math.max(0,Number(row.unread_count)||0);
-  const newUnreads=state.unreadReady&&Object.keys(next).some(k=>(next[k]||0)>(state.unreadCounts[k]||0));
-  state.unreadCounts=next;state.unreadReady=true;state.unreadError='';
-  if(newUnreads)playNewMessageSound();
+  const changed=state.unreadReady&&Object.keys(next).some(k=>(next[k]||0)>(state.unreadCounts[k]||0));
+  state.unreadCounts=next;state.unreadReady=true;state.unreadError='';state.unreadLastFetch=Date.now();
+  updateAlertIndicators();
+  if(changed)void playNewMessageSound();
  }catch(err){
-  if(!state.unreadError)console.warn('Unread notifications require migration 007:',err);
-  state.unreadError='Unread alerts are unavailable. Run the supplied Supabase SQL migration 007.';
- }
+  console.warn('Unread notifications query failed:',err);
+  state.unreadError='Unread notifications require the Supabase SQL update 011. '+(err.message||'');
+  const notice=document.querySelector('[data-unread-error]');if(notice)notice.textContent=state.unreadError;
+ }finally{state.unreadLoading=false;}
 }
-function conversationVisibleToAgent(caseId){
+function conversationVisibleToStaff(caseId){
  const c=findCaseById(caseId);
- return !!(c&&state.me?.role==='agent'&&c.assigned_to===state.me.id&&c.status==='assigned');
+ return !!(c&&(
+  (state.me?.role==='agent'&&c.assigned_to===state.me.id&&c.status==='assigned')||
+  (state.me?.role==='manager'&&['queued','assigned'].includes(c.status))
+ ));
 }
 async function markConversationRead(caseId){
- if(!conversationVisibleToAgent(caseId))return;
+ if(!conversationVisibleToStaff(caseId))return;
  try{
   const lastVisible=state.messages.reduce((n,m)=>m.author_kind==='field'?Math.max(n,Number(m.id)||0):n,0);
   if(lastVisible<1)return;
-  const r=await api().rpc('agent_mark_case_read',{p_case_id:caseId,p_visible_message_id:lastVisible});
+  const r=await api().rpc('resolve_staff_mark_case_read',{p_case_id:caseId,p_visible_message_id:lastVisible});
   if(r.error)throw r.error;
   state.unreadCounts[caseId]=0;
+  updateAlertIndicators();
  }catch(err){console.warn('Could not mark conversation read:',err)}
 }
 function isChatActuallyVisible(){
- return (state.tab==='inbox'||state.tab==='mycases')&&document.visibilityState==='visible'&&document.hasFocus();
+ return (state.tab==='inbox'||state.tab==='mycases')
+  &&state.chatSubview!=='activity'&&state.chatSubview!=='details'
+  &&document.visibilityState==='visible'&&document.hasFocus();
 }
 function rememberDraft(value){if(state.selected)state.drafts[state.selected]=value;}
 function scheduleLiveRefresh(){
  clearTimeout(window.resolveLiveRefreshTimer);
  window.resolveLiveRefreshTimer=setTimeout(()=>refresh(),170);
 }
-// A returning agent can acknowledge unread messages by opening their chat.
+function handleIncomingRealtimeMessage(payload){
+ if(canReceiveMessageAlerts()&&payload?.new?.author_kind==='field'){
+  // Query the server for exact per-user counts, including off-screen conversations.
+  void loadUnreadCounts(true);
+ }
+ scheduleLiveRefresh();
+}
+// Poll unread counts separately: heavy conversation queries cannot block alerts.
+setInterval(()=>{
+ if(canReceiveMessageAlerts()&&state.user&&document.visibilityState==='visible')void loadUnreadCounts();
+},15000);
 document.addEventListener('visibilitychange',()=>{
- if(document.visibilityState==='visible'&&state.me?.role==='agent')scheduleLiveRefresh();
+ if(document.visibilityState==='visible'&&canReceiveMessageAlerts()){
+  void loadUnreadCounts(true);scheduleLiveRefresh();
+ }
 });
 window.addEventListener('focus',()=>{
- if(state.me?.role==='agent')scheduleLiveRefresh();
+ if(canReceiveMessageAlerts()){void loadUnreadCounts(true);scheduleLiveRefresh();}
 });
 document.addEventListener('pointerdown',()=>{
- if(state.me?.role==='agent'&&state.soundEnabled)unlockNotificationAudio();
+ if(canReceiveMessageAlerts()&&state.soundEnabled)void unlockNotificationAudio();
+},{passive:true});
+document.addEventListener('keydown',()=>{
+ if(canReceiveMessageAlerts()&&state.soundEnabled)void unlockNotificationAudio();
 },{passive:true});
 
 const api=()=>{if(!state.client)throw Error(window.supabase?'Supabase connection has not started. Reload the page and try again.':'The Supabase library could not load. Check the internet connection or company network filtering, then reload the page.');return state.client};
@@ -719,7 +800,7 @@ function login(type){state.loginType=type;el.innerHTML=`<div class="authpage"><f
  <p class="footer">Keep your PIN private. Manager accounts should have MFA enabled before a company rollout.</p>
  </form></div>`;
 }
-async function signIn(ev){ev.preventDefault();unlockNotificationAudio();state.alert='';try{const username=document.getElementById('username').value.trim().toLowerCase();const password=document.getElementById('password').value;if(!/^[0-9]{6}$/.test(password))throw Error('Enter a six-digit PIN');const {data,error}=await api().auth.signInWithPassword({email:username+'@resolve-login.invalid',password});if(error)throw error;state.user=data.user;await initSession();if(state.loginType==='field'&&state.me.role!=='field'||state.loginType==='staff'&&state.me.role==='field'){await api().auth.signOut();state.user=null;state.me=null;throw Error('This account cannot use this portal.');}}catch(err){fail(err)}}
+async function signIn(ev){ev.preventDefault();primeAudioOnLogin();state.alert='';try{const username=document.getElementById('username').value.trim().toLowerCase();const password=document.getElementById('password').value;if(!/^[0-9]{6}$/.test(password))throw Error('Enter a six-digit PIN');const {data,error}=await api().auth.signInWithPassword({email:username+'@resolve-login.invalid',password});if(error)throw error;state.user=data.user;await initSession();if(state.loginType==='field'&&state.me.role!=='field'||state.loginType==='staff'&&state.me.role==='field'){await api().auth.signOut();state.user=null;state.me=null;throw Error('This account cannot use this portal.');}}catch(err){fail(err)}}
 // Server presence: a status of Available is NOT proof that somebody is signed in.
 async function touchAgentPresence(){
  if(state.me?.role!=='agent'||state.signingOut||state.presenceTouchInFlight)return false;
@@ -762,11 +843,11 @@ async function refresh(draw=true){try{if(!state.me||state.me.must_change_passwor
   await Promise.all([state.inboxMode!=='all'?loadInboxCases():Promise.resolve(),loadBotResolvedCount()]);
  }
  const selectable=state.tab==='inbox'&&state.me?.role!=='field'?liveConversationCases():state.cases;
- if(state.selected&&!selectable.some(x=>x.id===state.selected))state.selected=null;
- if(!state.selected&&selectable.length)state.selected=selectable[0].id;
- await loadSelected(false);if(state.tab==='overview'&&(state.overviewMode==='live'||state.overviewCases===null))await loadOverviewCases();if(state.me?.role==='agent'){await loadUnreadCounts();if(isChatActuallyVisible()&&state.selected&&unreadFor(state.selected)>0)await markConversationRead(state.selected);}if(draw){const dateInputFocused=(state.tab==='overview'&&document.activeElement?.matches?.('#overviewFrom,#overviewTo'))||(state.tab==='inbox'&&document.activeElement?.matches?.('#inboxFrom,#inboxTo'));if(dateInputFocused)return;render();if(hadFocus){const restored=document.getElementById('chattext');if(restored){restored.focus();try{restored.setSelectionRange(selection[0],selection[1])}catch{}}}}}catch(err){state.alert=err.message;render()}}
+ if(state.selected&&!selectable.some(x=>x.id===state.selected)){state.selected=null;state.selectedWasOpened=false;}
+ if(!state.selected&&selectable.length){state.selected=selectable[0].id;state.selectedWasOpened=false;}
+ await loadSelected(false);if(state.tab==='overview'&&(state.overviewMode==='live'||state.overviewCases===null))await loadOverviewCases();if(canReceiveMessageAlerts()){await loadUnreadCounts();if(state.selectedWasOpened&&isChatActuallyVisible()&&state.selected&&unreadFor(state.selected)>0)await markConversationRead(state.selected);}if(draw){const dateInputFocused=(state.tab==='overview'&&document.activeElement?.matches?.('#overviewFrom,#overviewTo'))||(state.tab==='inbox'&&document.activeElement?.matches?.('#inboxFrom,#inboxTo'));if(dateInputFocused)return;render();if(hadFocus){const restored=document.getElementById('chattext');if(restored){restored.focus();try{restored.setSelectionRange(selection[0],selection[1])}catch{}}}}}catch(err){state.alert=err.message;render()}}
 async function loadSelected(draw=true){if(!state.selected){state.messages=[];state.attempts=[];return}const [m,a]=await Promise.all([api().from('messages').select('*').eq('case_id',state.selected).order('created_at'),api().from('step_attempts').select('*').eq('case_id',state.selected)]);if(m.error)throw m.error;if(a.error)throw a.error;state.messages=m.data||[];state.attempts=a.data||[];if(draw)render()}
-function subscribe(){state.channels.forEach(ch=>api().removeChannel(ch));state.channels=[];const ch=api().channel('resolve-refresh-'+state.user.id).on('postgres_changes',{event:'*',schema:'public',table:'cases'},scheduleLiveRefresh).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'},scheduleLiveRefresh).on('postgres_changes',{event:'*',schema:'public',table:'profiles'},scheduleLiveRefresh).subscribe();state.channels=[ch]}
+function subscribe(){state.channels.forEach(ch=>api().removeChannel(ch));state.channels=[];const ch=api().channel('resolve-refresh-'+state.user.id).on('postgres_changes',{event:'*',schema:'public',table:'cases'},scheduleLiveRefresh).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'},handleIncomingRealtimeMessage).on('postgres_changes',{event:'*',schema:'public',table:'profiles'},scheduleLiveRefresh).subscribe();state.channels=[ch]}
 setInterval(()=>{if(state.me&&document.visibilityState==='visible'&&(state.me.role==='agent'||(state.me.role==='manager'&&state.tab==='team')||(state.tab==='overview'&&state.overviewMode==='live')||(state.me?.role==='manager'&&state.tab==='inbox')))scheduleLiveRefresh()},15000);
 async function logout(){
  state.signingOut=true;
@@ -777,6 +858,7 @@ async function logout(){
  }catch(err){console.warn('Could not end agent heartbeat:',err.message||String(err))}
  try{await api().auth.signOut({scope:'local'})}catch(err){console.warn('Sign-out failed:',err.message||String(err))}
  state.channels.forEach(ch=>api().removeChannel(ch));
+ document.title=DEFAULT_TITLE;
  Object.assign(state,{user:null,me:null,portal:null,selected:null,cases:[],messages:[],alert:'',unreadCounts:{},unreadReady:false,unreadError:'',drafts:{},onlineAgents:[],onlineAgentsReady:false,onlineAgentsError:'',signingOut:false});
  home();
 }
@@ -833,21 +915,21 @@ function caseSidePanel(){
 
 function header(){
  const person=state.me.display_name||'Colleague',first=person.split(/\s+/)[0];
- const bell=state.me.role==='agent'?unreadTotal():state.cases.filter(c=>c.status==='queued').length;
- return `<header class="top ui-top"><div class="ui-greeting"><span class="ui-sun">${icon('sun',27)}</span><div><strong>${e(greeting())}, ${e(first)}</strong><small>Verisure Resolve support workspace</small></div></div><div class="ui-header-actions"><button type="button" class="ui-bell" onclick="openTab('inbox')" aria-label="Open conversations">${icon('bell',21)}${bell>0?`<i>${bell>99?'99+':bell}</i>`:''}</button>${state.me.role==='agent'?soundToggleButton():''}${themeButton()}<div class="ui-profile"><span class="ui-profile-avatar">${e(initials(person))}</span><span><b>${e(person)}</b><small>${e(state.me.role==='manager'?'Manager':state.me.role==='agent'?'Technical Support':'Field colleague')}</small></span></div><button class="ui-signout" title="Sign out" aria-label="Sign out" onclick="logout()">${icon('logout',18)}</button></div></header>`;
+ const bell=canReceiveMessageAlerts()?unreadTotal():0;
+ return `<header class="top ui-top"><div class="ui-greeting"><span class="ui-sun">${icon('sun',27)}</span><div><strong>${e(greeting())}, ${e(first)}</strong><small>Verisure Resolve support workspace</small></div></div><div class="ui-header-actions"><button type="button" class="ui-bell" onclick="openTab('inbox')" aria-label="Open conversations">${icon('bell',21)}<i data-unread-indicator="bell" ${bell>0?'':'hidden'}>${bell>99?'99+':bell}</i></button>${soundToggleButton()}${themeButton()}<div class="ui-profile"><span class="ui-profile-avatar">${e(initials(person))}</span><span><b>${e(person)}</b><small>${e(state.me.role==='manager'?'Manager':state.me.role==='agent'?'Technical Support':'Field colleague')}</small></span></div><button class="ui-signout" title="Sign out" aria-label="Sign out" onclick="logout()">${icon('logout',18)}</button></div></header>`;
 }
 function nav(){
  const field=state.me.role==='field',manager=state.me.role==='manager';
  const tabs=field?[['conversations','My conversations','chat'],['new','Ask Resolve','plus']]:[['overview','Dashboard','home'],['inbox','Live Conversations','chat'],['mycases','My Conversations','inbox'],['monitor','BOT Activity','bot'],...(manager?[['knowledge','Knowledge Base','book'],['reports','Reports','chart']]:[]),['team','Team & Availability','users'],...(manager?[['accounts','User Management','shield']]:[])];
- return `<aside class="sidebar ui-sidebar"><div class="ui-side-logo"><span class="ui-official-lockup"><img class="ui-verisure-official" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAI8AAAAmCAYAAAD9cMi1AAAHK0lEQVR42u2baWxVRRiGn9JSiiC4UQQVAeuKuOsPZDGiiFEj0YjGJQLREFdc4q6oiUYhCiLBuIsSF4wEl7qwiFIk4gKIQYIVjSCCgtatVii244/7Hh0nc5Z7SynWeZNJz5n5Zjlz3/m2c1pkjCEgoBC0CVsQEMgTEMgTEMgTEMgTEBDIExDIE7A9oWQrjNEdOBHoAKwF5gG1YWsDedJwG3ARsAtggHpgPTADuCNsb+tGURMyzHcBt4g0PwNbgB2A9kAxUAmcFrY4kMfFUOBNoA6oAdrKfyoSmRqA3YGbgXvCNgfy2PgCqAC+B0qBRpGnjUzhJqBMpTPwe9jqEG0hX6ZCTnGZNU6xigF2FGGKgRvCNgfNAzAMmKnrOv1ttAgUma4i+UAdZMKGKAoL+B+RZ2/gKOAw4EDgTKutUeUPRVlYZqtUWqcBaCctVAl8CCwGPgF+CdvfOskzFLgOOD6hb71MVIllrozI1CjStBWB3JTAOuAN4F7gy238zG2BjiJ0faAAu8hC1AI/NdXnmapI6viUvqUiSHFERI3XQT5PqUUuF93J5YdWAWclzNEemAg8BkwHrkqQvRh4DngEGKv12LgEWKQNqlFZAJye8px9gFelMd9VWQj0VvutOghzgRGe/mOBpcAa4FugWvs7WvsXYYjGmAdMAzp5xjpFc88HHvY8I8Dd2tdq4B0dzms9cpdrXd9pbRslPzAze4wxdpluWgaDnHXYxUU3j0yJRy5q62OMWZ0y/wMxc5+V0OckyWy26hZZfdsYYxamzLvQkp/itPX1rGeqI1NutRUZYz6NmWe2JVdmjFmWsq6rE36Pv4uteSqA4S2kOp9LaBvv3Pf3yAz3RIQAewLLgR4p84+RmXZN94sZ1r7auv7Nup4B9Evp249cYtUdh5j0Ro1z387S+kuAvjHzdNPfYnJvAA5JWdcEYGQ+ZuvEFrS73eWQZyHPBTEmy8Z9+rvQqf9A5KuQuXHn6WuZy0qnfQ1wBTCKXOKzyjLfONe7KTKNsAE4WDmvU4C3ga9lSqOo1XU+TYy/5iPPTQpqbNyvQ1EJjFPdS8BOlswiBUTdgfOc/k/KH8pktsaYlsV+CSpyriPb2Wrr5rS9oPpBTv1kz7j9HJnpqh/q1H+UsLZqS65KdXs4/Z/PYAaucfrs5ZGZ7Mj0VP1Kp36Ep28vR+Z9j0yHfNZtO7Oft6Dm+UUOXhwmAYOt+1OBZ3V9pefE4XHE18vJPRooB1Z4TvLJzol2zaAPmzya/FtFLx11f45O8UqlKSrloOKkPvINcIyl6SKsVdDj4gTn/kdgD2ms9nKcGxyZxKDJJs9bCrPbtwB5xqa0v0buVUhXizARec615JYBH+l6d08UcnfKPDvKf3B/yB8S+jTEXJ8PvOxEU0Os+5XANYq8sKLWfMjU4DFni1P8HjtyW5syfnk+TN6nBYizBHgwg5x9mo7RZndynOE77RxWgesxHs3TmJE8tp/yCnBhQr8DFOIP0v1mp73Y06fRk2sjQ12h+1GbVfNEqn3/bWjCfpLDlgXj+fd7sv5AT0fmVUct25gIzJHpqlfZoKimowj5qWS75Ek2H5EAnlEZrOfsJXNqO6KPas/XZpgrTjs1JPymETZ69n6kTNfvGutHrWOTyL0unzxPVAZsAwd5fZZcglNmWf2XG2O+t+7vcWSHO/ONjhmzrTGmnVN3ldP3qIQ1fWzJveG07eyRLzLGbLD6/KH6w5w5r/P0rYnJZW206l6JWac7fnUB+x+b57GxAHi8mbXOQQX0ud/J/No2eZoj+6Ic1wgPK4Qv1+ncS89Yr5M2yTJXW/J5xRNjVqYoL1PtZG27OJqiLCZgiTTtIdJcVcDOVvtnljaqS3lrgBz1Ddb9vvK37D0cab1mujHfDLNdejej1nmvCYz/JiVTa5cjY+aPyzgfoX6jnPpDE9az2JJ7XXXHxDzzHE/9HGusp/LYw8PVp9QYs8Sqn5Gw1oqYsebH7GtBmsfnwG1NbGlC3yc8dXGh9GLgDE99j5gs85KEKCwOXT3jLgW+cuSO9YTLX/LvLxVGAu9n2IMRmiNykO1QfdeEfqtiksEDlY23MayQF6PEhLpbO6NcKKZIZUcmYq4c4TjMlPP3QUx7FXCoE/FVK9LYJJNQlzB+lZXvmWMdjn2UjV4RczAfUqb7V88ri9tjXk8skBl72qmfLRLV6eVmEuZq/1/3PFetxi5XtJhsrxO+5zkuw0IKxfomEigifgn5fVbRVRFP9KnICnIf7yfN0Qb4M2Xc0pR17KkfpFE/0KqM691XkdlmabJft/LvUALsxz/fXFXn07mlyLNOIWLAfxhJZuuHZpz357D1rZs8y5tx3llh61s3eaJcSXNgQtj61k+eszM4dwsUbvYg92npuhT5S8mWig/YzpH1X2/GAZeR+z4Zef1Pk8uC+ogwALie3KcTETaS+5ArmKxWgr8AkY1Gz8t36toAAAAASUVORK5CYII=" alt="Verisure" onerror="this.style.display='none';this.nextElementSibling.hidden=false"><span class="ui-logo-fallback" hidden><svg class="ui-mark-fallback" aria-hidden="true" width="30" height="30" viewBox="0 0 48 48" fill="none"><path d="M24 3.8c5.1-1.1 7.4 2.4 9 6.2 1.7 3.6 3.3 4.9 7.4 6.1 5.5 1.7 6.6 6 3.8 10.7-2 3.6-4.4 5.3-4.7 9.1-.3 5.5-4.4 8.6-9.5 7.1-3.6-1.1-5.8-1-9.3.2-5.4 1.9-9.7-1.3-9.8-6.8-.1-3.7-1.4-6.6-4.5-9.2C-.4 22 1 17 6.5 15.6c4.5-1.2 6.6-2.7 8.2-6.3 1.7-3.6 4.1-6.5 9.3-5.5Z" fill="currentColor"/><circle cx="24" cy="24" r="9.1" fill="#172337"/><circle cx="24" cy="24" r="7.3" fill="none" stroke="currentColor" stroke-width="1.3"/></svg><b>verisure</b></span></span><span class="ui-logo-rule"></span><strong>Resolve</strong></div><nav class="ui-menu" aria-label="App navigation">${tabs.map(([id,label,ico])=>`<button class="${state.tab===id?'active':''}" onclick="openTab('${id}')">${icon(ico,21)}<span>${e(label)}</span>${id==='inbox'&&state.me.role==='agent'&&unreadTotal()>0?`<em class="nav-unread">${unreadTotal()>99?'99+':unreadTotal()}</em>`:''}</button>`).join('')}</nav><div class="ui-sidebar-decoration"><small>RESOLVE · TECHNICAL SUPPORT</small></div></aside>`;
+ return `<aside class="sidebar ui-sidebar"><div class="ui-side-logo"><span class="ui-official-lockup"><img class="ui-verisure-official" src="data:image/png;base64,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" alt="Verisure" onerror="this.style.display='none';this.nextElementSibling.hidden=false"><span class="ui-logo-fallback" hidden><svg class="ui-mark-fallback" aria-hidden="true" width="30" height="30" viewBox="0 0 48 48" fill="none"><path d="M24 3.8c5.1-1.1 7.4 2.4 9 6.2 1.7 3.6 3.3 4.9 7.4 6.1 5.5 1.7 6.6 6 3.8 10.7-2 3.6-4.4 5.3-4.7 9.1-.3 5.5-4.4 8.6-9.5 7.1-3.6-1.1-5.8-1-9.3.2-5.4 1.9-9.7-1.3-9.8-6.8-.1-3.7-1.4-6.6-4.5-9.2C-.4 22 1 17 6.5 15.6c4.5-1.2 6.6-2.7 8.2-6.3 1.7-3.6 4.1-6.5 9.3-5.5Z" fill="currentColor"/><circle cx="24" cy="24" r="9.1" fill="#172337"/><circle cx="24" cy="24" r="7.3" fill="none" stroke="currentColor" stroke-width="1.3"/></svg><b>verisure</b></span></span><span class="ui-logo-rule"></span><strong>Resolve</strong></div><nav class="ui-menu" aria-label="App navigation">${tabs.map(([id,label,ico])=>`<button class="${state.tab===id?'active':''}" onclick="openTab('${id}')">${icon(ico,21)}<span>${e(label)}</span>${['inbox','mycases'].includes(id)&&canReceiveMessageAlerts()?`<em class="nav-unread" data-unread-indicator="${id}" ${unreadTotal()>0?'':'hidden'}>${unreadTotal()>99?'99+':unreadTotal()}</em>`:''}</button>`).join('')}</nav><div class="ui-sidebar-decoration"><small>RESOLVE · TECHNICAL SUPPORT</small></div></aside>`;
 }
 async function openTab(id){
- if(state.me?.role==='agent')unlockNotificationAudio();
+ if(canReceiveMessageAlerts())void unlockNotificationAudio();
  state.tab=id;state.filter='all';state.chatSubview='conversation';
  if(id==='reports'&&state.me?.role==='manager')await loadReportCases();
  else if(id==='overview'&&(state.overviewMode==='live'||state.overviewCases===null))await refresh();
  else if(id==='inbox'&&state.inboxMode!=='all')await refresh();
- else if(id==='mycases'){state.selected=state.cases.find(c=>c.assigned_to===state.me.id)?.id||null;await loadSelected(false);render();}
+ else if(id==='mycases'){state.selected=state.cases.find(c=>c.assigned_to===state.me.id)?.id||null;state.selectedWasOpened=false;await loadSelected(false);render();}
  else render();
 }
 function render(){
@@ -857,7 +939,8 @@ function render(){
  if(state.portal==='staff'&&!['overview','inbox','mycases','monitor','team','knowledge','reports','accounts'].includes(state.tab))state.tab='overview';
  let content='';if(state.tab==='new')content=newRequest();else if(['conversations','inbox','mycases'].includes(state.tab))content=inbox();else if(state.tab==='monitor')content=monitorPage();else if(state.tab==='knowledge')content=knowledgePage();else if(state.tab==='overview')content=overview();else if(state.tab==='team')content=team();else if(state.tab==='reports')content=reports();else if(state.tab==='accounts')content=accounts();
  el.innerHTML=`<div class="shell resolve-ui"><div class="layout">${nav()}<div class="ui-workspace">${header()}<main class="main ui-main">${showAlert()}${content}</main></div></div></div>`;
- const msgs=document.getElementById('messages');if(msgs)msgs.scrollTop=msgs.scrollHeight;
+ updateAlertIndicators();
+  const msgs=document.getElementById('messages');if(msgs)msgs.scrollTop=msgs.scrollHeight;
 }
 function scoredArticles(question){const q=String(question||'').toLowerCase();const words=q.match(/[a-z0-9]{3,}/g)||[];return state.articles.filter(a=>a.active).map(a=>{const title=a.title.toLowerCase(),keys=(a.keywords||'').toLowerCase().split(/[,;\s]+/).filter(x=>x.length>2);let score=(q.includes(title)?15:0);for(const w of words){if(title.includes(w))score+=3;if(keys.includes(w))score+=5;}return {a,score}}).filter(x=>x.score>0).sort((a,b)=>b.score-a.score)}
 function showSuggestion(){
@@ -908,13 +991,13 @@ function caseList(){
  let cases=state.tab==='mycases'?state.cases.filter(c=>c.assigned_to===state.me.id):state.me?.role==='field'?state.cases:liveConversationCases();
  if(state.filter!=='all')cases=cases.filter(c=>c.status===state.filter);
  const search=state.uiSearch||'';
- return `<section class="card ui-conversations"><div class="ui-search">${icon('search',19)}<input aria-label="Search conversations" placeholder="Search by name or topic…" value="${e(search)}" oninput="filterCaseSearch(this.value)"></div>${state.unreadError&&state.me?.role==='agent'?`<p class="date-error small">${e(state.unreadError)}</p>`:''}<div class="ui-case-list">${cases.length?cases.map(c=>{
- const who=state.me.role==='field'?'My request':name(c.field_id),n=state.me.role==='agent'&&c.assigned_to===state.me.id&&c.status==='assigned'?unreadFor(c.id):0;
+ return `<section class="card ui-conversations"><div class="ui-search">${icon('search',19)}<input aria-label="Search conversations" placeholder="Search by name or topic…" value="${e(search)}" oninput="filterCaseSearch(this.value)"></div>${state.unreadError&&canReceiveMessageAlerts()?`<p class="date-error small" data-unread-error>${e(state.unreadError)}</p>`:''}<div class="ui-case-list">${cases.length?cases.map(c=>{
+ const who=state.me.role==='field'?'My request':name(c.field_id),n=canReceiveMessageAlerts()&&conversationVisibleToStaff(c.id)?unreadFor(c.id):0;
  const fullSearch=(who+' '+c.subject+' '+c.id).toLowerCase();
- return `<button data-search="${e(fullSearch)}" ${search&&!fullSearch.includes(search)?'hidden':''} class="caseitem ui-case-row ${state.selected===c.id?'sel':''} ${n>0?'has-unread':''}" onclick="selectCase('${c.id}')"><span class="ui-case-avatar">${e(initials(who))}</span><span class="ui-case-content"><b>${e(who)}</b><small title="${e(c.subject)}">${e(c.subject)}</small><span class="chip ${e(c.status)}">${e(prettyStatus(c.status))}</span></span><span class="ui-case-tail"><time>${e(shortTime(c.last_activity_at||c.created_at))}</time>${n>0?`<em class="ui-unread">${n>99?'99+':n}</em>`:''}</span></button>`
+ return `<button data-unread-case="${e(c.id)}" data-search="${e(fullSearch)}" ${search&&!fullSearch.includes(search)?'hidden':''} class="caseitem ui-case-row ${state.selected===c.id?'sel':''} ${n>0?'has-unread':''}" onclick="selectCase('${c.id}')"><span class="ui-case-avatar">${e(initials(who))}</span><span class="ui-case-content"><b>${e(who)}</b><small title="${e(c.subject)}">${e(c.subject)}</small><span class="chip ${e(c.status)}">${e(prettyStatus(c.status))}</span></span><span class="ui-case-tail"><time>${e(shortTime(c.last_activity_at||c.created_at))}</time>${n>0?`<em class="ui-unread">${n>99?'99+':n}</em>`:''}</span></button>`
  }).join(''):'<p class="muted small" style="padding:12px">No conversations found.</p>'}</div></section>`;
 }
-async function selectCase(id){state.selected=id;state.chatSubview='conversation';await loadSelected(false);if(state.me?.role==='agent')await markConversationRead(id);render()}
+async function selectCase(id){state.selected=id;state.selectedWasOpened=true;state.chatSubview='conversation';await loadSelected(false);if(canReceiveMessageAlerts())await markConversationRead(id);render()}
 function currentStep(c){if(!c||c.status!=='ai')return null;const steps=state.steps.filter(s=>s.article_id===c.article_id);return steps.find(s=>!state.attempts.some(a=>a.step_id===s.id))||null}
 function chatPanel(){
  const c=findCaseById(state.selected);
