@@ -313,6 +313,19 @@
 @media(max-width:650px){#resolve-new-message-banner{left:12px;right:12px;top:72px;max-width:none;padding:10px}.resolve-ui .ui-alert-health{display:none}}
 [data-theme="dark"] #resolve-new-message-banner{background:#263448;color:#edf2fb;border-color:#be3957}
 [data-theme="dark"] #resolve-new-message-banner .resolve-alert-text span{color:#b3bfd4}
+
+/* Manager Knowledge Base CSV import and export. */
+.resolve-ui .kb-import-export-actions{gap:7px}
+.resolve-ui .kb-import-export-actions .btn{white-space:nowrap}
+.kb-import-modal{width:min(780px,96vw)!important;max-width:780px!important;max-height:90vh;overflow:auto}
+.kb-import-summary{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}
+.kb-import-summary span{background:#f1f5fa;border:1px solid #e0e7f2;border-radius:12px;padding:12px 15px;color:#52657f;font-size:13px}
+.kb-import-summary b{color:#10243e;font-size:20px;display:block}
+.kb-import-errors{border:1px solid #eed1bd;background:#fff8f1;padding:12px 15px;border-radius:12px;max-height:160px;overflow:auto;font-size:12px}
+.kb-import-errors ul{margin:7px 0;padding-left:22px}
+.kb-import-errors li{margin:4px 0}
+.kb-import-table table{min-width:470px}
+@media(max-width:650px){.resolve-ui .kb-import-export-actions{justify-content:flex-start}.resolve-ui .kb-import-export-actions button{font-size:11px}}
 </style></head><body><div id="app"></div><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.min.js'"></script><script>
 /* Public project credentials only; the SERVICE_ROLE key must NEVER be placed here. */
 const CONFIG={url:'https://qegoaryhedsttjcnvljz.supabase.co',anon:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFlZ29hcnloZWRzdHRqY252bGp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM3MTU1MzEsImV4cCI6MjEwOTI5MTUzMX0.OQpXIG42O6QgKVC2-Z9-MAoa8hnZlbAexol4LlSrtKw'};
@@ -899,6 +912,7 @@ function home(){
    <button class="portal" onclick="login('field')"><span class="porticon">↗</span><b>Field Login</b><span>Describe an issue and complete the guided solutions before automatic escalation.</span></button>
    <button class="portal" onclick="login('staff')"><span class="porticon">◉</span><b>Call Centre Login</b><span>Monitor conversations guided by Athena, take over requests and manage Technical Support.</span></button>
   </div>
+  ${state.alert&&/supabase|connection|network|settings/i.test(state.alert)?`<p role="alert" class="notice error" style="margin-top:18px">${e(state.alert)}</p>`:''}
  </div></section>`;
 }
 function login(type){state.loginType=type;el.innerHTML=`<div class="authpage"><form class="authcard" onsubmit="signIn(event)">
@@ -1231,7 +1245,197 @@ async function submitReassignment(ev,id){
 
 
 function monitorPage(){if(state.me.role==='field')return '';const active=state.cases.filter(c=>c.status==='ai');const queues=state.cases.filter(c=>c.status==='queued');return `<div class="pagehead"><div><h2>Athena monitoring</h2></div>${btn('Refresh','refresh()','alt sm')}</div><div class="cards"><div class="card"><span class="muted small">With Athena</span><div class="metric">${active.length}</div></div><div class="card"><span class="muted small">Awaiting human</span><div class="metric">${queues.length}</div></div><div class="card"><span class="muted small">Agent-connected</span><div class="metric">${state.cases.filter(c=>c.status==='assigned').length}</div></div></div><div class="card"><h3>Conversations with Athena</h3>${active.map(c=>{const steps=state.steps.filter(x=>x.article_id===c.article_id);return `<button class="caseitem" style="width:100%;text-align:left" onclick="state.tab='inbox';state.selected='${c.id}';loadSelected()"><b>${e(c.subject)}</b><div class="small muted">${e(name(c.field_id))} · ${fmt(c.created_at)} · ${steps.length} configured steps · View conversation →</div></button>`}).join('')||'<p class="muted">There are no active Athena conversations.</p>'}</div><div class="card" style="margin-top:12px"><h3>Waiting for a human agent</h3>${queues.map(c=>`<button class="caseitem" style="width:100%;text-align:left" onclick="state.tab='inbox';state.selected='${c.id}';loadSelected()"><b>${e(c.subject)}</b> · ${duration(queueMs(c))}</button>`).join('')||'<p class="muted">The queue is empty.</p>'}</div>`}
-function knowledgePage(){if(state.me.role!=='manager')return '<div class="notice">Manager access required.</div>';return `<div class="pagehead"><div><h2>Errors & solutions</h2></div>${btn('+ Add troubleshooting guide','editKnowledge()','sm')}</div><div class="kb-grid">${state.articles.filter(a=>!a.deleted_at).map(a=>{const steps=state.steps.filter(x=>x.article_id===a.id);return `<div class="card kb-entry"><div class="actions"><span class="chip ${a.active?'assigned':'resolved'}">${a.active?'Active':'Disabled'}</span></div><h3>${e(a.title)}</h3><div class="small muted">Keywords: ${e(a.keywords||'—')}</div><ol>${steps.map(x=>`<li>${e(x.instructions)}</li>`).join('')}</ol><div class="actions">${btn('Edit steps',`editKnowledge('${a.id}')`,'alt sm')}${btn(a.active?'Disable':'Enable',`toggleKnowledge('${a.id}',${!a.active})`,'soft sm')}${btn('Delete',`deleteKnowledge('${a.id}')`,'danger sm')}</div></div>`}).join('')}</div>`}
+function knowledgePage(){if(state.me.role!=='manager')return '<div class="notice">Manager access required.</div>';return `<div class="pagehead"><div><h2>Errors & solutions</h2></div><div class="toolbar kb-import-export-actions">${btn('Export all CSV','kbExportAll()','alt sm')}${btn('Import CSV',"document.getElementById('kb-import-file')?.click()",'soft sm')}${btn('Blank CSV template','kbDownloadTemplate()','alt sm')}${btn('+ Add troubleshooting guide','editKnowledge()','sm')}<input id="kb-import-file" class="hidden" type="file" accept=".csv,text/csv" onchange="kbChooseImport(event)" aria-label="Import Knowledge Base CSV"></div></div><div class="kb-grid">${state.articles.filter(a=>!a.deleted_at).map(a=>{const steps=state.steps.filter(x=>x.article_id===a.id);return `<div class="card kb-entry"><div class="actions"><span class="chip ${a.active?'assigned':'resolved'}">${a.active?'Active':'Disabled'}</span></div><h3>${e(a.title)}</h3><div class="small muted">Keywords: ${e(a.keywords||'—')}</div><ol>${steps.map(x=>`<li>${e(x.instructions)}</li>`).join('')}</ol><div class="actions">${btn('Edit steps',`editKnowledge('${a.id}')`,'alt sm')}${btn(a.active?'Disable':'Enable',`toggleKnowledge('${a.id}',${!a.active})`,'soft sm')}${btn('Delete',`deleteKnowledge('${a.id}')`,'danger sm')}</div></div>`}).join('')}</div>`}
+
+// Knowledge Base CSV: one row per troubleshooting guide; each step has its own Excel column.
+// Exports fetch every readable row from Supabase rather than relying on the first page in state.
+const KB_CSV_BASE=['title','keywords','active'];
+const KB_CSV_STEPS=Array.from({length:10},(_,i)=>'step_'+(i+1));
+const KB_CSV_TEMPLATE_HEADERS=[...KB_CSV_BASE,...KB_CSV_STEPS];
+let kbImportPlan=null;
+function kbCSVCell(value){
+ let str=String(value??'');
+ // Prevent Excel from interpreting imported guide text as a formula when exported.
+ if(/^[\s\x00-\x1f]*[=+@-]/.test(str))str="'"+str;
+ return '"'+str.replace(/"/g,'""')+'"';
+}
+function kbCSVString(headers,rows){
+ return '\uFEFF'+[headers,...rows].map(row=>row.map(kbCSVCell).join(',')).join('\r\n')+'\r\n';
+}
+function kbCSVDownload(filename,headers,rows){
+ const blob=new Blob([kbCSVString(headers,rows)],{type:'text/csv;charset=utf-8'});
+ const url=URL.createObjectURL(blob);
+ const link=document.createElement('a');link.href=url;link.download=filename;
+ document.body.appendChild(link);link.click();link.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),10000);
+}
+function kbDownloadTemplate(){
+ kbCSVDownload('Resolve_Knowledge_Base_Blank_Template.csv',KB_CSV_TEMPLATE_HEADERS,[]);
+}
+async function kbFetchEveryRow(table,columns,orderBy){
+ const results=[];const pageSize=500;
+ for(let start=0;start<100000;start+=pageSize){
+  const {data,error}=await api().from(table).select(columns).order(orderBy,{ascending:true}).range(start,start+pageSize-1);
+  if(error)throw error;
+  const current=data||[];results.push(...current);
+  if(current.length<pageSize)return results;
+ }
+ throw Error('Too many Knowledge Base records. Contact the administrator before exporting.');
+}
+async function kbExportAll(){
+ if(state.me?.role!=='manager')return;
+ const control=document.querySelector('.kb-import-export-actions button');
+ if(control){control.disabled=true;control.textContent='Exporting…';}
+ try{
+  const [articles,steps]=await Promise.all([
+   kbFetchEveryRow('articles','id,title,keywords,active,created_at,deleted_at','id'),
+   kbFetchEveryRow('article_steps','id,article_id,ordinal,instructions','id')
+  ]);
+  const byGuide=new Map();
+  for(const step of steps){if(!byGuide.has(step.article_id))byGuide.set(step.article_id,[]);byGuide.get(step.article_id).push(step);}
+  const maxSteps=Array.from(byGuide.values()).reduce((max,items)=>Math.max(max,items.length),10);
+  const headers=[...KB_CSV_BASE,'archived','guide_id','created_at',...Array.from({length:maxSteps},(_,i)=>'step_'+(i+1))];
+  const rows=articles.map(article=>{
+   const ordered=(byGuide.get(article.id)||[]).sort((a,b)=>a.ordinal-b.ordinal);
+   return [article.title,article.keywords||'',article.active?'TRUE':'FALSE',article.deleted_at?'TRUE':'FALSE',article.id,article.created_at||'',...Array.from({length:maxSteps},(_,i)=>ordered[i]?.instructions||'')];
+  });
+  kbCSVDownload('Resolve_Knowledge_Base_Export_'+new Date().toISOString().slice(0,10)+'.csv',headers,rows);
+  state.alert=`Exported ${articles.length} Knowledge Base guides and ${steps.length} troubleshooting steps.`;
+  render();
+ }catch(err){fail(err);}
+ finally{if(control&&control.isConnected){control.disabled=false;control.textContent='Export all CSV';}}
+}
+function kbParseCSV(source){
+ const text=String(source??'').replace(/^\uFEFF/,'');
+ const rows=[];let row=[];let cell='';let quoted=false;let afterQuote=false;
+ for(let i=0;i<text.length;i++){
+  const ch=text[i];
+  if(quoted){
+   if(ch==='"'){if(text[i+1]==='"'){cell+='"';i++;}else{quoted=false;afterQuote=true;}}
+   else cell+=ch;
+  }else if(afterQuote){
+   if(ch===','){row.push(cell);cell='';afterQuote=false;}
+   else if(ch==='\n'||ch==='\r'){row.push(cell);rows.push(row);row=[];cell='';afterQuote=false;if(ch==='\r'&&text[i+1]==='\n')i++;}
+   else if(ch===' '||ch==='\t'){} // Whitespace after a quoted value is permitted.
+   else throw Error(`Unexpected character after a closing quote near character ${i+1}.`);
+  }else if(ch==='"'){
+   if(cell.trim())throw Error(`Unexpected quote near character ${i+1}.`);
+   cell='';quoted=true;
+  }else if(ch===','){row.push(cell);cell='';}
+  else if(ch==='\n'||ch==='\r'){
+   row.push(cell);rows.push(row);row=[];cell='';if(ch==='\r'&&text[i+1]==='\n')i++;
+  }else cell+=ch;
+ }
+ if(quoted)throw Error('The CSV has an unfinished quoted cell. Save it as CSV UTF-8 from Excel.');
+ if(afterQuote||cell!==''||row.length){row.push(cell);rows.push(row);}
+ return rows.filter(r=>r.some(x=>String(x).trim()!==''));
+}
+function kbNormaliseImportedCell(value){
+ const s=String(value??'').trim();
+ // Round-trip safely escaped Excel formula-looking text from our own exports.
+ return /^'[=+@-]/.test(s)?s.slice(1):s;
+}
+function kbCSVBoolean(value,defaultValue=true){
+ const v=String(value??'').trim().toLowerCase();
+ if(!v)return defaultValue;
+ if(['true','yes','1','active','enabled'].includes(v))return true;
+ if(['false','no','0','inactive','disabled'].includes(v))return false;
+ throw Error('Use TRUE or FALSE in the Active or Archived column.');
+}
+async function kbChooseImport(event){
+ if(state.me?.role!=='manager')return;
+ const control=event.target;const file=control.files?.[0];control.value='';
+ if(!file)return;
+ if(!/\.csv$/i.test(file.name)){alert('Choose a .csv file exported from Excel.');return;}
+ if(file.size>5*1024*1024){alert('CSV file is too large (maximum 5 MB).');return;}
+ try{
+  const records=kbParseCSV(await file.text());
+  if(records.length<1)throw Error('The CSV is empty. Use the blank template to get started.');
+  if(records.length>2001)throw Error('Maximum 2,000 guides per import. Split the file into smaller CSV files.');
+  const headers=records[0].map(x=>String(x).trim().toLowerCase().replace(/^\uFEFF/,''));
+  if(new Set(headers).size!==headers.length)throw Error('The CSV has duplicate column names.');
+  for(const col of ['title','step_1'])if(!headers.includes(col))throw Error('Missing required CSV column: '+col);
+  const extraSteps=headers.filter(h=>/^step_\d+$/.test(h)&&Number(h.slice(5))>10);
+  if(extraSteps.length)throw Error('Imports support a maximum of 10 steps. Remove step_11 onwards before importing.');
+  if(headers.some(h=>h===''))throw Error('There is a blank column header.');
+  const originalRows=records.slice(1);
+  // Fetch the server-side titles to avoid inadvertently duplicating existing guides.
+  const existing=await kbFetchEveryRow('articles','id,title','id');
+  const known=new Set(existing.map(a=>String(a.title||'').trim().toLocaleLowerCase('en-GB')));
+  const duplicates=[];const errors=[];const ready=[];let archived=0;
+  for(let rowIndex=0;rowIndex<originalRows.length;rowIndex++){
+   const values=originalRows[rowIndex];const line=rowIndex+2;
+   if(values.length>headers.length){errors.push(`Row ${line}: too many columns.`);continue;}
+   const fields={};headers.forEach((h,i)=>fields[h]=kbNormaliseImportedCell(values[i]));
+   const title=(fields.title||'').trim();
+   if(title.length<3||title.length>200){errors.push(`Row ${line}: title must be 3–200 characters.`);continue;}
+   const keywords=fields.keywords||'';
+   if(keywords.length>1500){errors.push(`Row ${line}: keywords must be 1,500 characters or fewer.`);continue;}
+   let active=true,isArchived=false;
+   try{active=kbCSVBoolean(fields.active,true);isArchived=kbCSVBoolean(fields.archived,false);}
+   catch(err){errors.push(`Row ${line}: ${err.message}`);continue;}
+   const numbered=KB_CSV_STEPS.map(h=>fields[h]||'');
+   const last=numbered.reduce((n,s,i)=>s.trim()?i+1:n,0);
+   if(last===0){errors.push(`Row ${line}: add at least one troubleshooting step.`);continue;}
+   if(numbered.slice(0,last).some(s=>!s.trim())){errors.push(`Row ${line}: fill steps in order without empty gaps.`);continue;}
+   const instructions=numbered.slice(0,last).map(x=>x.trim());
+   if(instructions.some(s=>s.length>4000)){
+    errors.push(`Row ${line}: each step must be 4,000 characters or fewer.`);continue;
+   }
+   const key=title.toLocaleLowerCase('en-GB');
+   if(known.has(key)){duplicates.push(`Row ${line}: ${title}`);continue;}
+   known.add(key);
+   // Archived guides can be restored as disabled copies, never silently reactivated.
+   if(isArchived)archived++;
+   ready.push({line,title,keywords,steps:instructions,active:active&&!isArchived,archived:isArchived});
+  }
+  kbImportPlan={name:file.name,ready,duplicates,errors,archived,total:originalRows.length};
+  kbShowImportPreview();
+ }catch(err){alert('Cannot read CSV: '+(err.message||String(err)));}
+}
+function kbShowImportPreview(){
+ if(state.me?.role!=='manager'||!kbImportPlan)return;
+ const p=kbImportPlan;
+ document.getElementById('overlay')?.remove();
+ const preview=p.ready.slice(0,6).map(r=>`<tr><td>${r.line}</td><td><b>${e(r.title)}</b></td><td>${r.steps.length}</td><td>${r.active?'Active':'Disabled'}${r.archived?' (archived copy)':''}</td></tr>`).join('');
+ const messages=[...p.errors,...p.duplicates.map(s=>'Duplicate skipped — '+s)];
+ document.body.insertAdjacentHTML('beforeend',`<div id="overlay" class="overlay"><div class="modal kb-import-modal"><div class="pagehead"><div><h2>Import Knowledge Base CSV</h2><p class="muted small" style="margin:4px 0 0">${e(p.name)} · ${p.total} guide rows</p></div>${btn('Close',"document.getElementById('overlay')?.remove()",'alt sm')}</div><div class="kb-import-summary"><span><b>${p.ready.length}</b> ready</span><span><b>${p.duplicates.length}</b> duplicates skipped</span><span><b>${p.errors.length}</b> errors</span></div>${p.archived?`<p class="notice">${p.archived} archived guide(s) will be imported as disabled copies to preserve the instructions without making them available to Athena.</p>`:''}${messages.length?`<div class="kb-import-errors"><b>Review before importing</b><ul>${messages.slice(0,25).map(x=>`<li>${e(x)}</li>`).join('')}${messages.length>25?`<li>And ${messages.length-25} more...</li>`:''}</ul></div>`:''}${preview?`<div class="tablewrap kb-import-table"><table><thead><tr><th>CSV row</th><th>Issue name</th><th>Steps</th><th>Status</th></tr></thead><tbody>${preview}</tbody></table></div>`:''}<p class="small muted" style="margin-top:13px">Only new guide titles are imported; existing guides are not overwritten. CSV identifiers and creation dates are kept for export reference only. Imports use your manager permissions in Supabase.</p><p id="kb-import-progress" role="status" aria-live="polite"></p><div class="actions">${p.ready.length&&!p.errors.length?`<button type="button" id="kb-import-confirm" class="btn" onclick="kbConfirmImport()">Import ${p.ready.length} guide${p.ready.length===1?'':'s'}</button>`:''}${btn('Cancel',"document.getElementById('overlay')?.remove()",'alt')}</div></div></div>`);
+}
+async function kbConfirmImport(){
+ if(state.me?.role!=='manager'||!kbImportPlan||kbImportPlan.errors.length)return;
+ const p=kbImportPlan;
+ if(!p.ready.length)return;
+ if(!confirm(`Add ${p.ready.length} new guide(s) to the Knowledge Base? Existing guides will not be changed.`))return;
+ const button=document.getElementById('kb-import-confirm');if(button)button.disabled=true;
+ const status=document.getElementById('kb-import-progress');
+ let added=0;const failed=[];
+ for(let i=0;i<p.ready.length;i++){
+  const row=p.ready[i];
+  if(status)status.textContent=`Importing guide ${i+1} of ${p.ready.length}: ${row.title}`;
+  try{
+   const {data:id,error}=await api().rpc('admin_save_article',{
+    p_id:null,p_title:row.title,p_keywords:row.keywords,p_steps:row.steps
+   });
+   if(error)throw error;
+   if(!row.active){
+    const change=await api().rpc('admin_set_article_active',{p_id:id,p_active:false});
+    if(change.error){
+     // Do not leave a requested disabled guide active if the status update fails.
+     const cleanup=await api().rpc('admin_delete_article',{p_id:id});
+     if(cleanup.error)throw Error(`Guide was created ACTIVE because disabling failed. Please disable it manually now: ${row.title}. ${change.error.message}`);
+     throw Error(`The disabled guide could not be saved and was removed: ${change.error.message}`);
+    }
+   }
+   added++;
+  }catch(err){failed.push(`Row ${row.line} (${row.title}): ${err.message||String(err)}`);}
+ }
+ kbImportPlan=null;
+ document.getElementById('overlay')?.remove();
+ await refresh();
+ const details=failed.length?'\n\n'+failed.slice(0,10).join('\n'):'';
+ alert(`${added} guide(s) imported. ${p.duplicates.length} duplicate(s) skipped. ${failed.length} failed.${details}`);
+}
+
 function kbStepFields(steps){
  const count=Math.max(5,steps.length);
  return Array.from({length:count},(_,i)=>`<div class="kb-editor-step"><div class="kb-editor-step-head"><label for="kbstep-${i+1}">Step ${i+1}</label></div><textarea id="kbstep-${i+1}" class="kb-step-input" rows="3" maxlength="10000" placeholder="Enter troubleshooting instructions for step ${i+1}">${e(steps[i]||'')}</textarea></div>`).join('');
@@ -1542,12 +1746,36 @@ async function deleteAccount(id){
  try{await invokeAccounts({action:'delete',user_id:id});state.alert='Access removed for '+p.username;await refresh()}catch(err){fail(err)}
 }
 
-// Show the landing page immediately, even if a network request is slow or fails.
+// Keep the landing page visible even when the network or Supabase CDN fails.
+// Use the official Supabase alternative CDN if jsDelivr is blocked by a company network.
+function loadSupabaseFallback(){
+ if(window.supabase?.createClient)return Promise.resolve(true);
+ return new Promise(resolve=>{
+   const script=document.createElement('script');
+   let finished=false;
+   const timeout=setTimeout(()=>finish(false),8000);
+   function finish(ok){
+     if(finished)return;
+     finished=true;
+     clearTimeout(timeout);
+     if(!ok)script.remove();
+     resolve(ok);
+   }
+   script.src='https://unpkg.com/@supabase/supabase-js@2';
+   script.async=true;
+   script.onload=()=>finish(Boolean(window.supabase?.createClient));
+   script.onerror=()=>finish(false);
+   document.head.appendChild(script);
+ });
+}
 home();
 (async()=>{try{
-  if(!window.supabase){state.alert='Supabase could not load. Check your connection and refresh this page.';return;}
+  if(!window.supabase?.createClient){
+    const loaded=await loadSupabaseFallback();
+    if(!loaded)throw Error('Supabase library could not load. Check your internet connection or ask IT to allow jsDelivr or unpkg.');
+  }
   if(!CONFIG.url.startsWith('https://')||CONFIG.anon.startsWith('REPLACE_')){
-    state.alert='Supabase project settings are incomplete.';return;
+    throw Error('Supabase project settings are incomplete.');
   }
   state.client=window.supabase.createClient(CONFIG.url,CONFIG.anon,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}});
   const {data,error}=await state.client.auth.getSession();
