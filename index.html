@@ -1052,7 +1052,7 @@ async function verifyManagerMfa(ev){
   mfaPending=null;securityLastActivity=Date.now();await initSession();
  }catch(err){if(mfaPending)showManagerMfa('Verification failed. Try a new authenticator code.');else{await logout();}}
 }
-async function initSession(){const {data,error}=await api().from('profiles').select('*').eq('id',state.user.id).single();if(error||!data?.enabled){await api().auth.signOut();throw Error('Account not authorised or disabled.')}if(data.role==='manager'&&!await requireManagerMfa()){state.me=null;return;}state.me=data;state.portal=data.role==='field'?'field':'staff';if(state.loginType==='field'&&data.role!=='field'||state.loginType==='staff'&&data.role==='field'){await api().auth.signOut();throw Error('Please use the correct login portal for your role.');}if(data.must_change_password){passwordModal();return}setupAgentAlerts();if(state.me.role==='agent')await touchAgentPresence();await refresh(true);subscribe();void scanIncomingFieldMessages();}
+async function initSession(){const {data,error}=await api().from('profiles').select('*').eq('id',state.user.id).single();if(error||!data?.enabled){await api().auth.signOut();throw Error('Account not authorised or disabled.')}if((state.loginType==='field'&&data.role!=='field')||(state.loginType==='staff'&&data.role==='field')){await api().auth.signOut({scope:'local'});throw Error('Please use the correct login portal for your role.');}state.loginType=data.role==='field'?'field':'staff';if(data.role==='manager'&&!await requireManagerMfa()){state.me=null;return;}state.me=data;state.portal=state.loginType;if(data.must_change_password){passwordModal();return}setupAgentAlerts();if(state.me.role==='agent')await touchAgentPresence();await refresh(true);subscribe();void scanIncomingFieldMessages();}
 function passwordModal(){el.innerHTML=`<div class="authpage"><form class="authcard" onsubmit="changePassword(event)">
  <div class="login-brand">${logoMark()}${themeButton()}</div><h2 style="margin-top:18px">Set your personal PIN</h2>
  <p class="muted small">Your temporary PIN must be changed before using Resolve. Avoid dates, repeated numbers or sequential PINs.</p>${showAlert()}
@@ -1061,7 +1061,7 @@ function passwordModal(){el.innerHTML=`<div class="authpage"><form class="authca
  <div style="height:18px"></div><button class="btn full">Update PIN</button></form></div>`;
 }
 async function changePassword(ev){ev.preventDefault();try{const p=document.getElementById('newpw').value;if(p!==document.getElementById('newpw2').value)throw Error('Passwords do not match');if(!/^[0-9]{6}$/.test(p))throw Error('Use exactly six numeric digits');const {error}=await api().auth.updateUser({password:p});if(error)throw error;const r=await api().rpc('change_my_password_completed');if(r.error)throw r.error;state.me.must_change_password=false;setupAgentAlerts();if(state.me.role==='agent')await touchAgentPresence();await refresh(true);subscribe()}catch(err){fail(err);passwordModal()}}
-async function refresh(draw=true){try{if(!state.me||state.me.must_change_password)return;const input=document.getElementById('chattext');const hadFocus=draw&&document.activeElement===input;const selection=hadFocus?[input.selectionStart,input.selectionEnd]:null;const c=api();const [cs,ps,as,ss]=await Promise.all([baseCaseQuery(c),c.from('profiles').select('id,username,display_name,role,enabled,agent_state,max_chats,available_since,can_monitor,can_takeover,can_reassign').order('display_name'),c.from('articles').select('*').order('title'),c.from('article_steps').select('*').order('ordinal')]);for(const r of [cs,ps,as,ss])if(r.error)throw r.error;state.cases=cs.data||[];pruneFieldHistory();state.profiles=ps.data||[];
+async function refresh(draw=true){try{if(!state.me||state.me.must_change_password||state.signingOut)return;const refreshUser=state.user?.id;const input=document.getElementById('chattext');const hadFocus=draw&&document.activeElement===input;const selection=hadFocus?[input.selectionStart,input.selectionEnd]:null;const c=api();const [cs,ps,as,ss]=await Promise.all([baseCaseQuery(c),c.from('profiles').select('id,username,display_name,role,enabled,agent_state,max_chats,available_since,can_monitor,can_takeover,can_reassign').order('display_name'),c.from('articles').select('*').order('title'),c.from('article_steps').select('*').order('ordinal')]);if(!state.me||state.signingOut||state.user?.id!==refreshUser)return;for(const r of [cs,ps,as,ss])if(r.error)throw r.error;state.cases=cs.data||[];pruneFieldHistory();state.profiles=ps.data||[];
  if(state.me?.role==='agent'||state.me?.role==='manager'){
   const online=await c.rpc('resolve_online_agents');
   if(online.error){
@@ -1072,7 +1072,7 @@ async function refresh(draw=true){try{if(!state.me||state.me.must_change_passwor
    state.onlineAgentsReady=true;state.onlineAgentsError='';
   }
  }
- const own=state.profiles.find(p=>p.id===state.me.id);if(!own||!own.enabled||own.role!==state.me.role){await logout();return;}if(state.me.role==='agent')state.me.agent_state=own.agent_state;state.articles=as.data||[];state.steps=ss.data||[];if(state.tab==='inbox'&&state.me?.role!=='field'){
+ if(!state.me||state.signingOut||state.user?.id!==refreshUser)return;const own=state.profiles.find(p=>p.id===state.me.id);if(!own||!own.enabled||own.role!==state.me.role){await logout();return;}if(state.me.role==='agent')state.me.agent_state=own.agent_state;state.articles=as.data||[];state.steps=ss.data||[];if(state.tab==='inbox'&&state.me?.role!=='field'){
   await Promise.all([state.inboxMode!=='all'?loadInboxCases():Promise.resolve(),loadBotResolvedCount()]);
  }
  const selectable=state.tab==='inbox'&&state.me?.role!=='field'?liveConversationCases():state.cases;
@@ -1089,7 +1089,7 @@ async function loadSelected(draw=true){
 function subscribe(){state.channels.forEach(ch=>api().removeChannel(ch));state.channels=[];const ch=api().channel('resolve-refresh-'+state.user.id).on('postgres_changes',{event:'*',schema:'public',table:'cases'},scheduleLiveRefresh).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'},handleIncomingRealtimeMessage).on('postgres_changes',{event:'*',schema:'public',table:'profiles'},scheduleLiveRefresh).subscribe(status=>{state.realtimeStatus=status;updateAlertIndicators()});state.channels=[ch]}
 setInterval(()=>{if(state.me&&document.visibilityState==='visible'&&(state.me.role==='agent'||(state.me.role==='manager'&&state.tab==='team')||(state.tab==='overview'&&state.overviewMode==='live')||(state.me?.role==='manager'&&state.tab==='inbox')))scheduleLiveRefresh()},15000);
 async function logout(){
- state.signingOut=true;mfaPending=null;
+ state.signingOut=true;mfaPending=null;athenaStepInsights.request++;athenaStepInsights.rows=null;athenaStepInsights.loading=false;kbImportPlan=null;
  try{
   if(state.me?.role==='agent'){
    await api().rpc('resolve_agent_signing_out');
@@ -1100,7 +1100,7 @@ async function logout(){
  document.getElementById('resolve-new-message-banner')?.remove();
  state.scanCursor=null;state.scanPrimed=false;state.alertedMessageIds=new Set();
  document.title=DEFAULT_TITLE;
- Object.assign(state,{user:null,me:null,portal:null,selected:null,cases:[],messages:[],profiles:[],articles:[],steps:[],attempts:[],reportCases:null,inboxCases:null,overviewCases:null,alert:'',unreadCounts:{},unreadReady:false,unreadError:'',drafts:{},onlineAgents:[],onlineAgentsReady:false,onlineAgentsError:'',signingOut:false});
+ Object.assign(state,{user:null,me:null,portal:null,tab:'overview',selected:null,cases:[],messages:[],profiles:[],articles:[],steps:[],attempts:[],reportCases:null,inboxCases:null,overviewCases:null,alert:'',unreadCounts:{},unreadReady:false,unreadError:'',drafts:{},onlineAgents:[],onlineAgentsReady:false,onlineAgentsError:'',signingOut:false});
  home();
 }
 
@@ -1498,10 +1498,12 @@ function athenaStepSearch(){
  render();
 }
 function athenaStepRate(solved,attempts){return attempts?`${(100*solved/attempts).toFixed(1)}%`:'—';}
-function athenaStepExport(which){
+async function athenaStepExport(which){
  if(state.me?.role!=='manager'||athenaStepInsights.loading||athenaStepInsights.rows===null)return;
  const st=athenaStepInsights;
  const suffix=st.mode==='custom'?`${st.from}_to_${st.to}`:st.mode;
+ try{await recordSecurityExport(which==='summary'?'step_summary':'step_detail');}catch(err){fail(err);return;}
+ if(state.me?.role!=='manager')return;
  if(which==='summary'){
   const groups=athenaStepGroups(athenaStepScopeRows());
   downloadCsv('Athena_Step_Success_Summary_'+suffix+'.csv',[
@@ -1592,7 +1594,7 @@ let kbImportPlan=null;
 function kbCSVCell(value){
  let str=String(value??'');
  // Prevent Excel from interpreting imported guide text as a formula when exported.
- if(/^[\s\x00-\x1f]*[=+@-]/.test(str))str="'"+str;
+ if(/^[\s\u0000-\u001f\ufeff]*[=+@\-＝＋＠－]|^[\t\r\n]/u.test(str))str="'"+str;
  return '"'+str.replace(/"/g,'""')+'"';
 }
 function kbCSVString(headers,rows){
@@ -1635,6 +1637,7 @@ async function kbExportAll(){
    const ordered=(byGuide.get(article.id)||[]).sort((a,b)=>a.ordinal-b.ordinal);
    return [article.title,article.keywords||'',article.active?'TRUE':'FALSE',article.deleted_at?'TRUE':'FALSE',article.id,article.created_at||'',...Array.from({length:maxSteps},(_,i)=>ordered[i]?.instructions||'')];
   });
+  await recordSecurityExport('knowledge_base');
   kbCSVDownload('Resolve_Knowledge_Base_Export_'+new Date().toISOString().slice(0,10)+'.csv',headers,rows);
   state.alert=`Exported ${articles.length} Knowledge Base guides and ${steps.length} troubleshooting steps.`;
   render();
@@ -1996,6 +1999,7 @@ async function exportSummary(){
   const cases=await currentReportCases();
   const rows=[['ID','Created','Field username','Field name','Subject','Article ID','Status','Assigned agent','Queued at','Assigned at','Resolved at','Field reported fixed at','Queue wait seconds','Resolution seconds','Resolution note'],
   ...cases.map(c=>[c.id,c.created_at,state.profiles.find(p=>p.id===c.field_id)?.username||c.field_id,name(c.field_id),c.subject,c.article_id,caseStatusLabel(c.status),name(c.assigned_to),c.queued_at,c.assigned_at,c.resolved_at,c.field_reports_fixed_at,queueMs(c)==null?'':Math.round(queueMs(c)/1000),resolveMs(c)==null?'':Math.round(resolveMs(c)/1000),c.resolution])];
+  await recordSecurityExport('conversation_summary');
   downloadCsv('resolve-conversations-'+reportFileSuffix()+'.csv',rows);
  }catch(err){fail(err)}
 }
@@ -2019,6 +2023,7 @@ async function exportTranscripts(){
   const map=new Map(cases.map(c=>[c.id,c]));
   const rows=[['Case ID','Issue','Case created','Case status','Message ID','Timestamp','Sender','Sender type','Message'],
   ...messages.map(m=>[m.case_id,map.get(m.case_id)?.subject,map.get(m.case_id)?.created_at,caseStatusLabel(map.get(m.case_id)?.status),m.id,m.created_at,m.author_id?name(m.author_id):systemMessageSender(m),m.author_kind,m.body])];
+  await recordSecurityExport('conversation_transcripts');
   downloadCsv('resolve-full-transcripts-'+reportFileSuffix()+'.csv',rows);
  }catch(err){fail(err)}
 }
@@ -2040,7 +2045,16 @@ function accounts(){
  ${former.length?`<div class="card" style="margin-top:16px"><h3>Former colleagues (${former.length})</h3><div class="tablewrap"><table style="min-width:580px"><thead><tr><th>Colleague</th><th>Previous role</th><th>Record</th><th>Action</th></tr></thead><tbody>${former.map(p=>`<tr><td><b>${e(p.display_name)}</b></td><td>${e(p.role)}</td><td class="small muted">Login removed</td><td>${btn('Restore name',`restoreFormerName('${p.id}')`,'alt sm')}</td></tr>`).join('')}</tbody></table></div><p class="small muted">If a name was erased by an older deletion, select Restore name and enter the person's correct name. Previously erased names cannot be recovered automatically from this record.</p></div>`:''}
  <div class="note" style="margin-top:16px">Six-digit PINs on a publicly accessible website are vulnerable to guessing. Manager MFA is mandatory in this client. Server-side enforcement, Auth rate limits and company security approval are required before real use.</div>`;
 }
+async function recordSecurityExport(kind){
+ if(state.me?.role!=='manager')throw Error('Manager access required');
+ const result=await api().rpc('resolve_log_export',{p_kind:kind});
+ if(result.error)throw Error('Export blocked: audit service unavailable. Contact IT.');
+ if(state.me?.role!=='manager'||state.signingOut)throw Error('Session ended');
+}
 async function invokeAccounts(body){
+ if(state.me?.role!=='manager'||state.signingOut)throw Error('Manager access required');
+ const level=await api().auth.mfa.getAuthenticatorAssuranceLevel();
+ if(level.error||level.data.currentLevel!=='aal2')throw Error('Manager verification required');
  const {data,error}=await api().functions.invoke('accounts',{body});
  if(error){let reason=error.message||'Edge Function failed';try{if(error.context&&typeof error.context.json==='function'){const details=await error.context.json();reason=details.error||details.message||reason}}catch{}throw Error(reason)}
  if(data?.error)throw Error(data.error);
@@ -2116,7 +2130,7 @@ home();
   state.client=window.supabase.createClient(CONFIG.url,CONFIG.anon,{auth:{persistSession:true,storage:window.sessionStorage,autoRefreshToken:true,detectSessionInUrl:false}});
   const {data,error}=await state.client.auth.getSession();
   if(error)throw error;
-  if(data.session){state.user=data.session.user;await initSession();return;}
+  if(data.session){state.loginType=null;state.user=data.session.user;await initSession();return;}
  }catch(err){state.alert=err.message||String(err);state.user=null;state.me=null;home();}
 })();
 </script></body></html>
